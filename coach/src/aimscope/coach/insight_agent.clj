@@ -24,15 +24,17 @@
             [clojure.string :as str])
   (:import [com.embabel.agent.core AgentPlatform ProcessContext ProcessOptions]))
 
-;; Cadeia de fallback por LATENCIA (NVIDIA build; ver openai-models.yml) —
-;; pedido do JP 2026-07-02: priorizar menor latencia. narrar-llm tenta na ordem
-;; ate um produzir narrativa VALIDA; qualquer falha (timeout, jargao, estrutura)
-;; passa pro proximo, e esgotar a cadeia cai no texto deterministico.
-;; Latencias de 1o token medidas ao vivo (streaming, free endpoint):
+;; Cadeia de fallback (NVIDIA build; ver openai-models.yml). Topo = z-ai/glm-5.2
+;; (padrao pedido pelo JP 2026-07-02; sem tools/structured output, mas os
+;; consumidores daqui sao texto puro com validacao propria). Atras dele, a
+;; ordem por LATENCIA de 1o token medida ao vivo (streaming, free endpoint):
 ;;   minimax-m3 ~2s · qwen3.5-397b ~2.2s · kimi-k2.6 ~3.2s ·
 ;;   v4-flash ~7.5s · v4-pro timeout>90s (o mais forte, mas no fim por latencia)
+;; Qualquer falha (timeout, jargao, estrutura) passa pro proximo; esgotar a
+;; cadeia cai no texto deterministico.
 (def model-chain
-  ["minimaxai/minimax-m3"
+  ["z-ai/glm-5.2"
+   "minimaxai/minimax-m3"
    "qwen/qwen3.5-397b-a17b"
    "moonshotai/kimi-k2.6"
    "deepseek-ai/deepseek-v4-flash"

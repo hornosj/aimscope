@@ -11,6 +11,7 @@ const BASE: &str = "https://integrate.api.nvidia.com/v1/chat/completions";
 /// na frente quando definido.
 fn model_chain() -> Vec<String> {
     let defaults = [
+        "z-ai/glm-5.2",
         "minimaxai/minimax-m3",
         "qwen/qwen3.5-397b-a17b",
         "moonshotai/kimi-k2.6",
