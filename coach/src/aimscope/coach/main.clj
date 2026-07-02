@@ -103,12 +103,19 @@
 
 (defn- run-diagnose [opts]
   (let [{:keys [catalog thresholds scores kins ds]} (load-state opts)
-        est   (skills/estimate kins scores catalog)
+        est   (skills/estimate kins scores catalog thresholds)
         dsdb  (db/->datascript scores est)
         res   (residual/analyze scores est catalog thresholds dsdb)
         diag  (assoc (residual/diagnosis est res)
                      :residuals res
                      :skills/por-categoria (skills-por-categoria est)
+                     ;; Tendência (ADR 0004): direção vs. o próprio histórico,
+                     ;; NUNCA nível — a UI desenha ↑↓ ao lado da barra absoluta
+                     :skills/tendencia
+                     (->> (skills/trend scores catalog)
+                          (mapv (fn [[k {:keys [z dir]}]]
+                                  {:skill k :label (labels/skill-nome k)
+                                   :z z :dir (name dir)})))
                      :percentiles (latest-percentiles ds)
                      :placement (placement/status scores)
                      :n-scores (count scores) :n-sessions (count kins))]
@@ -179,9 +186,9 @@
                       {:target target-str}))))
 
 (defn- run-plan [opts]
-  (let [{:keys [catalog scores kins ds]} (load-state opts)
+  (let [{:keys [catalog thresholds scores kins ds]} (load-state opts)
         prof  (profile/load-profile)
-        est   (skills/estimate kins scores catalog)
+        est   (skills/estimate kins scores catalog thresholds)
         entry (resolve-target catalog (:target opts) prof est)
         p     (plan/build-plan catalog prof est entry)]
     ;; snapshot das skills NO MOMENTO do plano — é contra ele que o `outcome`
@@ -219,12 +226,12 @@
 (def ^:private outcome-min-delta 3.0)
 
 (defn- run-outcome [opts]
-  (let [{:keys [catalog scores kins ds]} (load-state opts)
+  (let [{:keys [catalog thresholds scores kins ds]} (load-state opts)
         plans (db/facts ds :plan)]
     (if (empty? plans)
       (println "nenhum plano registrado ainda — rode 'plan' primeiro")
       (let [{:keys [plan skills-at-plan] :as pf} (last plans)
-            est (skills/estimate kins scores catalog)
+            est (skills/estimate kins scores catalog thresholds)
             per-skill
             (vec (for [step (:steps plan)
                        :let [sk   (:skill step)

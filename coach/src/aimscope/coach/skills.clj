@@ -5,6 +5,11 @@
   reactive-tracking/speed, click-timing/stability) são score-driven até o
   sensor ganhar o canal correspondente.
 
+  ADR 0004: o canal de score é sempre ABSOLUTO — melhor score na régua de
+  tiers do benchmark (a mesma da energia) -> 0-100. O z relativo ao próprio
+  histórico NÃO é nível: é a TENDÊNCIA (fn `trend`), indicador direcional
+  exibido separado e nunca fundido.
+
   Escala: 0–100, 50 = neutro. Âncoras: carrega anchors.edn CALIBRADO pelo lab
   (docs/design-vod-lab.md §9, ADR 0003) quando existir no classpath; fallback
   pro prior provisório hardcoded — o coach offline nunca depende do lab.
@@ -14,7 +19,8 @@
   :confidence 0 e FORA do diagnóstico — nunca inventamos número."
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
-            [aimscope.coach.catalog :as cat]))
+            [aimscope.coach.catalog :as cat]
+            [aimscope.coach.residual :as residual]))
 
 ;; ---------------------------------------------------------------------------
 ;; âncoras: métrica cinemática -> score 0-100 (lerp em pontos de referência)
@@ -182,7 +188,7 @@
         (apply-anchor-confidence (:meta @calibrated)))))
 
 ;; ---------------------------------------------------------------------------
-;; evidência de score: z do próprio histórico distribui p/ skills via catálogo
+;; evidência de score: nível ABSOLUTO pela régua de tiers (ADR 0004)
 ;; ---------------------------------------------------------------------------
 
 (defn- mean [xs] (/ (reduce + xs) (count xs)))
@@ -190,23 +196,56 @@
   (let [mu (mean xs)] (Math/sqrt (max 1e-9 (mean (map #(Math/pow (- % mu) 2) xs))))))
 
 (defn score-evidence
-  "Para cada cenário com ≥3 scores, z do último vs histórico -> 0-100 (sigmoide)
-  distribuído pelas skills do catálogo com os pesos como confiança."
-  [scores catalog]
-  (let [by-scen (group-by :catalog-id (filter :catalog-id scores))]
+  "Nível ABSOLUTO por cenário: melhor score na régua de tiers (a mesma da
+  energia) -> 0-100, distribuído pelas skills do catálogo com o peso como
+  confiança. UMA run já é evidência (a confiança cresce com o nº de plays —
+  é o que torna o placement de 1 run útil). Cenário sem régua semeada não
+  gera nível: nível nunca vem de z relativo (ADR 0004)."
+  [scores catalog thresholds]
+  (let [by-scen (group-by :catalog-id (filter :catalog-id scores))
+        cat-by  (into {} (map (juxt :id identity)) catalog)]
     (reduce
      (fn [acc [cid ss]]
-       (let [vals (mapv :score (sort-by :played-at ss))]
-         (if (< (count vals) 3)
+       (let [scen (:scenario (last (sort-by :played-at ss)))
+             best (apply max (map :score ss))
+             v    (some-> (cat/threshold-for thresholds scen)
+                          (residual/scaled-actual best))]
+         (if-not v
            acc
-           (let [z     (/ (- (peek vals) (mean vals)) (std vals))
-                 v     (* 100.0 (/ 1.0 (+ 1.0 (Math/exp (- (* 1.2 z)))))) ; sigmoide
-                 entry (first (filter #(= cid (:id %)) catalog))]
+           (let [n-conf (min 1.0 (/ (count ss) 4.0))]
              (reduce (fn [a [skill w]]
                        (update a skill (fnil conj [])
-                               {:value v :confidence (* w (min 1.0 (/ (count vals) 8.0)))}))
-                     acc (:skills entry))))))
+                               {:value (double v) :confidence (* w n-conf)}))
+                     acc (:skills (cat-by cid)))))))
      {} by-scen)))
+
+(defn trend
+  "TENDÊNCIA (CONTEXT.md, ADR 0004): z do último score vs a média do PRÓPRIO
+  jogador, agregado por skill (pesos do catálogo como peso da média). É um
+  indicador direcional — nunca nível, nunca entra na fusão. Exige ≥3 plays
+  no cenário. -> {skill {:z x :dir :up|:flat|:down}}"
+  [scores catalog]
+  (let [by-scen (group-by :catalog-id (filter :catalog-id scores))
+        cat-by  (into {} (map (juxt :id identity)) catalog)
+        zs (reduce
+            (fn [acc [cid ss]]
+              (let [vals (mapv :score (sort-by :played-at ss))]
+                (if (< (count vals) 3)
+                  acc
+                  (let [z (/ (- (peek vals) (mean vals)) (std vals))]
+                    (reduce (fn [a [skill w]]
+                              (update a skill (fnil conj []) [z w]))
+                            acc (:skills (cat-by cid)))))))
+            {} by-scen)]
+    (into {}
+          (map (fn [[skill obs]]
+                 (let [wsum (reduce + (map second obs))
+                       z    (/ (reduce + (map (fn [[z w]] (* z w)) obs))
+                               (max wsum 1e-9))]
+                   [skill {:z z :dir (cond (> z 0.35)    :up
+                                           (< z -0.35)   :down
+                                           :else         :flat)}])))
+          zs)))
 
 ;; ---------------------------------------------------------------------------
 ;; fusão EWMA
@@ -228,11 +267,12 @@
    {} evidence-seq))
 
 (defn estimate
-  "Pipeline completo: fatos -> estimativas das 11 skills (sem inventar as sem
-  evidência). kin-facts = fatos :kinematics; score-facts = fatos :score."
-  [kin-facts score-facts catalog]
+  "Pipeline completo: fatos -> estimativas das 14 skills (sem inventar as sem
+  evidência). kin-facts = fatos :kinematics; score-facts = fatos :score;
+  thresholds = índice de régua por nome (cat/load-thresholds)."
+  [kin-facts score-facts catalog thresholds]
   (let [kin-evs  (map #(kinematic-evidence (:metrics %)) kin-facts)
-        score-ev (score-evidence score-facts catalog)
+        score-ev (score-evidence score-facts catalog thresholds)
         ;; score-ev vira UMA evidência agregada por skill (média ponderada)
         score-ev' (into {}
                         (map (fn [[skill obs]]

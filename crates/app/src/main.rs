@@ -1085,6 +1085,22 @@ impl App {
             let weakest = d.get("gargalo-global").and_then(|g| g.get("skill"))
                 .and_then(|s| s.as_str()).unwrap_or("").to_string();
             let mut top6: Vec<String> = Vec::new();
+            // tendência por skill (ADR 0004): direção vs. a própria média,
+            // desenhada como seta ao lado da barra — nunca como nível
+            let trends: std::collections::HashMap<String, String> = d
+                .get("skills/tendencia")
+                .and_then(|t| t.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|t| {
+                            Some((
+                                t.get("skill")?.as_str()?.to_string(),
+                                t.get("dir")?.as_str()?.to_string(),
+                            ))
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
 
             theme::card().show(ui, |ui| {
                 theme::section_title(ui, "Suas habilidades");
@@ -1123,7 +1139,8 @@ impl App {
                                     Some(v) => {
                                         // magnitude em um matiz só; o ponto fraco leva o status
                                         let fill = if k == weakest { theme::SERIOUS } else { theme::ACCENT };
-                                        theme::stat_bar(ui, &name, v, fill, hint);
+                                        theme::stat_bar_trend(ui, &name, v, fill, hint,
+                                            trends.get(k).map(|s| s.as_str()));
                                     }
                                     None => {
                                         let row = ui.horizontal(|ui| {

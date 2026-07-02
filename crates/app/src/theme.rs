@@ -31,7 +31,6 @@ pub const SERIES: [Color32; 8] = [
 
 // acento de UI (slot 1 da categórica) e status reservados
 pub const ACCENT: Color32 = Color32::from_rgb(0x39, 0x87, 0xe5);
-#[allow(dead_code)] // status reservado (deltas positivos futuros)
 pub const GOOD: Color32 = Color32::from_rgb(0x0c, 0xa3, 0x0c);
 pub const SERIOUS: Color32 = Color32::from_rgb(0xec, 0x83, 0x5a);
 pub const CRITICAL: Color32 = Color32::from_rgb(0xd0, 0x3b, 0x3b);
@@ -77,6 +76,19 @@ pub fn section_title(ui: &mut egui::Ui, text: &str) {
 /// Barra 0-100 no spec de marca: fina, ponta de dado arredondada (4px) e base
 /// quadrada, trilha recessiva; o VALOR fica fora da barra, em tinta.
 pub fn stat_bar(ui: &mut egui::Ui, label: &str, value: f64, fill: Color32, hint: Option<&str>) {
+    stat_bar_trend(ui, label, value, fill, hint, None);
+}
+
+/// stat_bar com TENDÊNCIA (ADR 0004): seta direcional ao lado do valor —
+/// "estou melhorando?" — nunca misturada ao nível absoluto da barra.
+pub fn stat_bar_trend(
+    ui: &mut egui::Ui,
+    label: &str,
+    value: f64,
+    fill: Color32,
+    hint: Option<&str>,
+    trend: Option<&str>, // "up" | "down" | "flat"
+) {
     ui.horizontal(|ui| {
         let lbl = ui.add_sized(
             [150.0, 16.0],
@@ -103,5 +115,13 @@ pub fn stat_bar(ui: &mut egui::Ui, label: &str, value: f64, fill: Color32, hint:
                 .small()
                 .strong(),
         );
+        if let Some((glyph, color, tip)) = match trend {
+            Some("up") => Some(("↗", GOOD, "tendência: acima da sua média recente")),
+            Some("down") => Some(("↘", SERIOUS, "tendência: abaixo da sua média recente")),
+            _ => None,
+        } {
+            ui.label(egui::RichText::new(glyph).color(color).small().strong())
+                .on_hover_text(tip);
+        }
     });
 }

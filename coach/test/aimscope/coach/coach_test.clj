@@ -236,9 +236,61 @@
        "Técnica de flick")))
 
 (deftest skills-sem-evidencia-ficam-fora
-  (let [est (skills/estimate [] [] catalog)]
+  (let [est (skills/estimate [] [] catalog (cat/load-thresholds))]
     (is (nil? (get-in est [:click-timing/reading :value])))
     (is (zero? (get-in est [:click-timing/reading :confidence])))))
+
+;; ---------------------------------------------------------------------------
+;; canal de score ABSOLUTO por tiers + tendência separada (ADR 0004)
+;; ---------------------------------------------------------------------------
+
+(deftest score-evidencia-e-absoluta-pela-regua
+  (let [th (cat/load-thresholds)]
+    (testing "1 run já gera nível absoluto (régua de energia: 850 = 400/12)"
+      (let [ev (skills/score-evidence
+                [{:scenario "VT Pasu Rasp Novice" :catalog-id :vt4/pasu
+                  :score 850 :played-at "2026-07-01T10:00:00"}]
+                catalog th)]
+        (is (seq ev))
+        (let [{:keys [value confidence]} (first (get ev :flick-tech/stability))]
+          (is (= (/ 400.0 12.0) (double value)) "nível = energia/12, absoluto")
+          (is (< 0.0 confidence 0.5) "1 play: evidência válida, confiança reduzida"))))
+    (testing "caso do item 1: score alto em cenário de LEITURA -> nível alto"
+      ;; top ~37.5% no Air Pure (940 = nível 62.5 na régua percentil) tem que
+      ;; sair ~62, nunca 23 — o z relativo não é mais nível
+      (let [ev (skills/score-evidence
+                [{:scenario "Air Pure Easier No UFO" :catalog-id :vs/rt-reading
+                  :score 940 :played-at "2026-07-01T10:00:00"}]
+                catalog th)
+            v (:value (first (get ev :reactive-tracking/reading)))]
+        (is (> v 60.0) (str "leitura com score alto saiu " v))))
+    (testing "queda recente NÃO derruba o nível (best score na régua)"
+      (let [runs (map-indexed (fn [i s] {:scenario "Air Pure Easier No UFO"
+                                         :catalog-id :vs/rt-reading :score s
+                                         :played-at (str "2026-07-0" (inc i) "T10:00:00")})
+                              [940 920 900])   ; caindo vs. si mesmo
+            ev (skills/score-evidence (vec runs) catalog th)
+            v (:value (first (get ev :reactive-tracking/reading)))]
+        (is (> v 60.0) "tendência de queda é assunto do trend, não do nível")))
+    (testing "cenário sem régua semeada não gera nível (nunca z relativo)"
+      (is (empty? (skills/score-evidence
+                   [{:scenario "Bounce 180" :catalog-id :com/bounce-180
+                     :score 999 :played-at "2026-07-01T10:00:00"}]
+                   catalog th))))))
+
+(deftest tendencia-e-direcional-e-separada
+  (let [runs (fn [scores]
+               (vec (map-indexed
+                     (fn [i s] {:scenario "Air Pure Easier No UFO"
+                                :catalog-id :vs/rt-reading :score s
+                                :played-at (str "2026-07-0" (inc i) "T10:00:00")})
+                     scores)))]
+    (is (= :up   (get-in (skills/trend (runs [900 910 940]) catalog)
+                         [:reactive-tracking/reading :dir])))
+    (is (= :down (get-in (skills/trend (runs [940 930 890]) catalog)
+                         [:reactive-tracking/reading :dir])))
+    (testing "menos de 3 plays: sem tendência (nunca inventamos direção)"
+      (is (empty? (skills/trend (runs [900 940]) catalog))))))
 
 (deftest reaction-simple-entra-com-screen-data
   (let [ev (skills/kinematic-evidence
