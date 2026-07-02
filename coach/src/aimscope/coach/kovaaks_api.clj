@@ -7,7 +7,8 @@
   playlist/popular, leaderboard/scores/global."
   (:require [hato.client :as http]
             [cheshire.core :as json]
-            [clojure.java.io :as io])
+            [clojure.java.io :as io]
+            [clojure.string :as str])
   (:import [java.time Instant Duration]))
 
 (def ^:private base "https://kovaaks.com/webapp-backend")
@@ -18,10 +19,10 @@
   (io/file (System/getenv "LOCALAPPDATA") "aimscope" "cache"
            (str (Math/abs (hash k)) ".json")))
 
-(defn- fresh? [f]
+(defn- fresh? [f ttl-h*]
   (and (.exists f)
        (< (- (System/currentTimeMillis) (.lastModified f))
-          (* ttl-h 3600 1000))))
+          (* ttl-h* 3600 1000))))
 
 (defn- polite-get [url params]
   (let [since (- (System/currentTimeMillis) @last-req)]
@@ -32,20 +33,68 @@
       :body (json/parse-string true)))
 
 (defn fetch
-  "GET com cache. Devolve corpo parseado ou nil (offline/erro = degrada)."
-  [path params]
-  (let [k (str path "?" (pr-str (sort params)))
-        f (cache-file k)]
-    (if (fresh? f)
-      (json/parse-string (slurp f) true)
-      (try
-        (let [body (polite-get (str base path) params)]
-          (io/make-parents f)
-          (spit f (json/generate-string body))
-          body)
-        (catch Exception e
-          (.println System/err (str "[kovaaks-api] falha (seguindo sem): " (.getMessage e)))
-          (when (.exists f) (json/parse-string (slurp f) true)))))))
+  "GET com cache. Devolve corpo parseado ou nil (offline/erro = degrada).
+  ttl opcional em horas (default 24; pontuações de benchmark usam 1)."
+  ([path params] (fetch path params ttl-h))
+  ([path params ttl]
+   (let [k (str path "?" (pr-str (sort params)))
+         f (cache-file k)]
+     (if (fresh? f ttl)
+       (json/parse-string (slurp f) true)
+       (try
+         (let [body (polite-get (str base path) params)]
+           (io/make-parents f)
+           (spit f (json/generate-string body))
+           body)
+         (catch Exception e
+           (.println System/err (str "[kovaaks-api] falha (seguindo sem): " (.getMessage e)))
+           (when (.exists f) (json/parse-string (slurp f) true))))))))
+
+(defn steam-id-for
+  "username do webapp -> steamId (perfil oficial; fallback: busca por nome,
+  match case-insensitive exato). nil se não achar/offline."
+  [username]
+  (or (:steamId (fetch "/user/profile/by-username" {"username" username}))
+      (some (fn [{:keys [steamId] u :username}]
+              (when (and u (.equalsIgnoreCase ^String u ^String username)) steamId))
+            (fetch "/user/search" {"username" username}))))
+
+(defn- steam-vanity->id
+  "Vanity da Steam -> steamID64 via o XML público do steamcommunity (sem API
+  key). nil se não existir/offline."
+  [vanity]
+  (try
+    (let [body (:body (http/get (str "https://steamcommunity.com/id/" vanity "/?xml=1")
+                                {:timeout 15000
+                                 :headers {"user-agent" "aimscope/0.1 (analise pessoal de treino)"}}))]
+      (second (re-find #"<steamID64>(\d{17})</steamID64>" (str body))))
+    (catch Exception _ nil)))
+
+(defn resolve-steam-id
+  "Entrada do usuário -> steamID64. Aceita, nesta ordem:
+  - steamID64 cru (17 dígitos) ou URL steamcommunity.com/profiles/<id>
+  - URL steamcommunity.com/id/<vanity> ou o vanity puro (resolvido via Steam)
+  - por último, username do webapp kovaaks.com (quem já conhece o site).
+  A Steam é a porta de entrada (QA do JP): nem todo mundo sabe que o
+  kovaaks.com existe."
+  [input]
+  (let [s (str/trim (str input))]
+    (when (seq s)
+      (or (re-find #"^\d{17}$" s)
+          (second (re-find #"steamcommunity\.com/profiles/(\d{17})" s))
+          (when-let [v (second (re-find #"steamcommunity\.com/id/([^/?\s]+)" s))]
+            (steam-vanity->id v))
+          (when-not (str/includes? s "/") (steam-vanity->id s))
+          (when-not (str/includes? s "/") (steam-id-for s))))))
+
+(defn benchmark-progress
+  "Progresso do jogador num benchmark: categorias -> cenários com score (×100),
+  scenario_rank (tier 0-N) e rank_maxes (a régua oficial do bench). TTL 1h —
+  o jogador joga e quer ver a pontuação nova sem esperar um dia."
+  [benchmark-id steam-id]
+  (fetch "/benchmarks/player-progress-rank-benchmark"
+         {"benchmarkId" benchmark-id "steamId" steam-id}
+         1))
 
 (defn scenario-search [q]
   (fetch "/scenario/popular" {"page" 0 "max" 20 "scenarioNameSearch" q}))

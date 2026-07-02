@@ -221,4 +221,9 @@ catalog/*.edn ──────────────────────
 10. **embabel-clj**: adapter copiado do beautiful-linkedin para coach/;
     extração de lib compartilhada só quando o shape estiver provado nos dois
     domínios.
+11. **Calibração de âncoras por VOD** (grill 2026-07-02): as âncoras
+    cinemática→skill (hoje prior provisório em `skills.clj`) serão calibradas na
+    população por um pipeline OFFLINE de vídeo. Escopo, dois tiers e gate de
+    ground-truth em `docs/design-vod-lab.md`; decisão de escopo em ADR 0003.
+    Régua de nível = energia (thresholds semeados 2026-07-02).
 ```

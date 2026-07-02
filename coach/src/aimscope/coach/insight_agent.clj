@@ -18,12 +18,28 @@
   Entrada: os JSONs que o coach determinístico (deps.edn) já emite em
   %LOCALAPPDATA%/aimscope/coach/. Saída: narrative.md no mesmo diretório."
   (:require [aimscope.coach.embabel :as a]
+            [aimscope.coach.narrative :as nar]
             [cheshire.core :as json]
             [clojure.java.io :as io]
             [clojure.string :as str])
   (:import [com.embabel.agent.core AgentPlatform ProcessContext ProcessOptions]))
 
-(def default-model "openai/gpt-oss-120b:free")
+;; Cadeia de fallback por LATENCIA (NVIDIA build; ver openai-models.yml) —
+;; pedido do JP 2026-07-02: priorizar menor latencia. narrar-llm tenta na ordem
+;; ate um produzir narrativa VALIDA; qualquer falha (timeout, jargao, estrutura)
+;; passa pro proximo, e esgotar a cadeia cai no texto deterministico.
+;; Latencias de 1o token medidas ao vivo (streaming, free endpoint):
+;;   minimax-m3 ~2s · qwen3.5-397b ~2.2s · kimi-k2.6 ~3.2s ·
+;;   v4-flash ~7.5s · v4-pro timeout>90s (o mais forte, mas no fim por latencia)
+(def model-chain
+  ["minimaxai/minimax-m3"
+   "qwen/qwen3.5-397b-a17b"
+   "moonshotai/kimi-k2.6"
+   "deepseek-ai/deepseek-v4-flash"
+   "deepseek-ai/deepseek-v4-pro"])
+
+;; usado por narrate! como binding do blackboard e por chamadas single-model.
+(def default-model (first model-chain))
 
 ;; ---- blackboard helpers (mesmos contratos do beautiful-linkedin) -----------
 
@@ -58,9 +74,13 @@
         o (read-json "outcome.json")]
     {:diagnosis (when d (select-keys d [:skills/ranked :skills/sem-evidencia
                                         :gargalo-global :cenarios-subperformando
-                                        :n-scores :n-sessions]))
-     :plan      (when p (select-keys p [:status :target :goal :steps :cost-min]))
+                                        :placement :n-scores :n-sessions]))
+     :plan      (when p (select-keys p [:status :target :target-label :goal
+                                        :steps :cost-min]))
      :outcome   (when o (select-keys o [:veredito-geral :por-skill :recomendacao]))}))
+
+;; Conteúdo determinístico + validação vivem em aimscope.coach.narrative
+;; (ns puro, testável no deps.edn — este ns só faz a fiação GOAP/embabel).
 
 ;; ===========================================================================
 ;; AÇÕES (tags lidas pelo build-agent)
@@ -82,70 +102,59 @@
         :action/cost 1.0
         :action/llm  true}
   narrar-llm
-  "Narrativa de coach via OpenRouter. Falha -> polo narrativa/llm-falhou?
-  (replanejamento pega o fallback). Sucesso -> narrativa/pronta?."
+  "LLM como POLIDOR do rascunho determinístico (nunca autor): recebe o texto
+  pronto e só melhora a prosa. Percorre a CADEIA de modelos por latência
+  (model-chain) até um produzir saída VÁLIDA (narrativa-valida?: jargão,
+  seção faltando ou tamanho errado REPROVAM). Esgotar a cadeia aciona o polo
+  de falha -> fluxo determinístico (QA 2026-07-02: anti-alucinação, e nunca
+  refém de um provider). env AIMSCOPE_LLM força um único modelo (curto-circuita
+  a cadeia — útil pra depurar)."
   [oc pc]
   (let [dados (g pc "coach/dados" {})
-        model (g pc "coach/model" default-model)
+        forced (g pc "coach/model" nil)
+        chain (if forced [forced] model-chain)
+        rascunho (nar/narrativa-deterministica dados)
         prompt (str
-                "Você é um coach de aim training brutalmente honesto e técnico "
-                "(estilo Voltaic), escrevendo em português brasileiro para UM aluno.\n"
-                "Dados medidos do aluno (JSON; skills 0-100, 50=neutro; "
-                "'gargalo-global' = pior skill; plano gerado por GOAP; "
-                "'outcome' = previsto×realizado do plano anterior):\n\n"
-                (json/generate-string dados {:pretty true})
-                "\n\nEscreva em markdown, no MÁXIMO 350 palavras, com EXATAMENTE "
-                "estas seções:\n"
-                "## Diagnóstico\n(2-3 frases: o gargalo e o que os números dizem — "
-                "cite os valores)\n"
-                "## O plano e o porquê\n(explique POR QUE cada cenário do plano "
-                "ataca o gargalo)\n"
-                "## Como executar\n(dicas de execução concretas por drill: grip, "
-                "velocidade, intenção)\n"
-                "## Sinal de alerta\n(1 frase: o que indicaria que o plano não está "
-                "funcionando)\n\n"
-                "Regras: NÃO invente números que não estão nos dados; se um campo "
-                "estiver vazio/null, diga 'sem dados ainda' em vez de inventar; "
-                "NUNCA sugira mudar sensibilidade (o perfil do aluno decide isso, "
-                "não você); skills marcadas 'sem-evidencia' não existem para você.")
-        out (ask oc model prompt)]
-    (if (and out (> (count (str/trim out)) 100))
-      (do (s! pc "coach/narrativa" (str/trim out))
-          (s! pc "coach/fonte" "llm")
+                "Você é um coach de aim training experiente, direto e encorajador, "
+                "escrevendo em português brasileiro para UM aluno leigo.\n\n"
+                "Abaixo está o texto TÉCNICO CORRETO do diagnóstico dele. Reescreva "
+                "APENAS a prosa para soar mais natural e motivadora.\n\n"
+                "REGRAS INEGOCIÁVEIS:\n"
+                "- Mantenha EXATAMENTE os mesmos títulos de seção (## ...).\n"
+                "- Mantenha TODOS os números exatamente como estão; não invente nenhum.\n"
+                "- Não use NENHUM identificador técnico (nada contendo '/'). Os nomes "
+                "amigáveis já estão no texto — use só eles.\n"
+                "- Não sugira mudar sensibilidade.\n"
+                "- Não adicione nem remova cenários, minutos ou seções.\n"
+                "- Máximo 400 palavras.\n\n"
+                "TEXTO:\n\n" rascunho)
+        [modelo texto]
+        (some (fn [m]
+                (let [out (some-> (ask oc m prompt) str/trim)]
+                  (if (nar/narrativa-valida? out)
+                    [m out]
+                    (do (log! pc "modelo" m (if out "reprovou (jargão/estrutura)"
+                                                "sem resposta") "— próximo da cadeia")
+                        nil))))
+              chain)]
+    (if texto
+      (do (log! pc "narrativa via" modelo)
+          (s! pc "coach/narrativa" texto)
+          (s! pc "coach/fonte" (str "llm-polido:" modelo))
           (c! pc {"narrativa/pronta?" true}))
-      (do (log! pc "LLM sem resposta útil — acionando polo de falha")
+      (do (log! pc "cadeia esgotada — usando determinístico")
           (c! pc {"narrativa/llm-falhou?" true})))))
 
 (defn ^{:action/pre  ["dados/carregados?" "narrativa/llm-falhou?"]
         :action/post ["narrativa/pronta?"]
         :action/cost 5.0}
   narrar-fallback
-  "Narrativa determinística (template) — LLM é aditivo, nunca obrigatório."
+  "Fluxo determinístico: o rascunho canônico VIRA a narrativa. Não é um
+  'fallback pobre' — é o mesmo conteúdo que o LLM poliria."
   [pc]
-  (let [{:keys [diagnosis plan outcome]} (g pc "coach/dados" {})
-        gargalo (get-in diagnosis [:gargalo-global :skill])
-        valor   (get-in diagnosis [:gargalo-global :value])
-        steps   (get plan :steps [])
-        md (str "## Diagnóstico\n"
-                (if gargalo
-                  (format "Seu gargalo atual é **%s** (%.0f/100). As demais skills seguem no relatório.\n"
-                          (str gargalo) (double (or valor 50.0)))
-                  "Sem dados suficientes ainda — grave sessões de treino com a captura ligada.\n")
-                "\n## O plano e o porquê\n"
-                (if (seq steps)
-                  (str/join "\n" (map #(format "- **%s min de %s** → treina %s (%s)"
-                                               (str (:minutes %)) (str (:scenario %))
-                                               (str (:skill %)) (str (:expected-delta %)))
-                                      steps))
-                  "Sem plano ativo — rode o coach após a próxima sessão.")
-                "\n\n## Como executar\nPriorize precisão sobre velocidade; a velocidade vem da precisão consolidada.\n"
-                "\n## Sinal de alerta\nSe após 2 semanas o `outcome` acusar platô, replaneje — o GOAP re-roteia sozinho.\n"
-                (when outcome
-                  (str "\n---\n_Previsto×realizado do último plano: "
-                       (str (:veredito-geral outcome)) "_\n")))]
-    (s! pc "coach/narrativa" md)
-    (s! pc "coach/fonte" "fallback")
-    (c! pc {"narrativa/pronta?" true})))
+  (s! pc "coach/narrativa" (nar/narrativa-deterministica (g pc "coach/dados" {})))
+  (s! pc "coach/fonte" "deterministica")
+  (c! pc {"narrativa/pronta?" true}))
 
 (defn ^{:action/pre  ["narrativa/pronta?"]
         :action/post ["narrativa/salva?"]
@@ -158,8 +167,9 @@
     (io/make-parents f)
     (spit f md)
     (spit (io/file (coach-dir) "narrative.json")
+          ;; :fonte = "llm-polido:<modelo>" ou "deterministica" — carrega o
+          ;; modelo REAL que a cadeia usou (o default nao diz nada útil)
           (json/generate-string {:fonte (g pc "coach/fonte" "?")
-                                 :model (g pc "coach/model" default-model)
                                  :chars (count md)}))
     (s! pc "coach/narrativa-path" (str f))
     (log! pc "salvo em" (str f) "| fonte:" (g pc "coach/fonte" "?"))
@@ -182,11 +192,14 @@
              :value 1.0}]}))
 
 (defn narrate!
-  "Deploya e roda o agente UMA vez. Modelo via env AIMSCOPE_LLM (default free)."
+  "Deploya e roda o agente UMA vez. Sem env AIMSCOPE_LLM, percorre a cadeia
+  inteira por latência (model-chain). Com AIMSCOPE_LLM setado, força esse único
+  modelo (curto-circuita a cadeia — depuração)."
   [^AgentPlatform platform]
   (let [ag (insight-agent)]
     (.deploy platform ag)
-    (let [bindings {"coach/model" (or (System/getenv "AIMSCOPE_LLM") default-model)}
+    (let [forced (System/getenv "AIMSCOPE_LLM")
+          bindings (if forced {"coach/model" forced} {})
           proc (.runAgentFrom platform ag (ProcessOptions.) bindings)
           path (.get (.getBlackboard proc) "coach/narrativa-path")]
       (println (str "status=" (.getStatus proc) " narrativa=" path))

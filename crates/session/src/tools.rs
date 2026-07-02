@@ -98,9 +98,21 @@ pub fn run_sidecar(python: &Path, session_dir: &Path, quiet: bool) -> Result<Str
 }
 
 /// Roda o agente Embabel de narrativa (fat-jar Maven do coach). Exige o jar
-/// buildado (`mvn package` em coach/) e Java 21; LLM via OPENROUTER_APIKEY —
-/// sem chave o agente degrada pro fallback determinístico e ainda entrega.
+/// buildado (`mvn package` em coach/) e Java 21; LLM via NVIDIA_APIKEY (NVIDIA
+/// build) — sem chave o agente degrada pro fallback determinístico e ainda
+/// entrega.
 pub fn run_narrate() -> Result<String> {
+    run_agent_jar(&[])
+}
+
+/// Interpreta o objetivo em linguagem natural (agente "objective" do fat-jar).
+/// A UI grava o texto em profile.json antes; o agente escreve objective.json
+/// e atualiza o próprio profile.json (modo/foco/jogo).
+pub fn run_objective() -> Result<String> {
+    run_agent_jar(&["objective"])
+}
+
+fn run_agent_jar(args: &[&str]) -> Result<String> {
     let coach = find_coach_dir().context("coach/ não encontrado")?;
     let jar = coach.join("target").join("aimscope-coach.jar");
     if !jar.exists() {
@@ -110,7 +122,7 @@ pub fn run_narrate() -> Result<String> {
         );
     }
     let mut cmd = std::process::Command::new("java");
-    cmd.arg("-jar").arg(&jar).current_dir(&coach);
+    cmd.arg("-jar").arg(&jar).args(args).current_dir(&coach);
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -126,6 +138,30 @@ pub fn run_narrate() -> Result<String> {
         bail!("agente de narrativa falhou:\n{text}");
     }
     Ok(text)
+}
+
+/// Reset do coach: apaga as sessões gravadas, o user.db e as saídas do coach.
+/// Zera o estado APRENDIDO, não as preferências: config.json, profile/objetivo
+/// e o cache da API do KovaaK's ficam intactos.
+pub fn reset_coach_data() -> Result<()> {
+    let base = dirs::data_local_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("aimscope");
+    let sessions = default_base_dir();
+    if sessions.exists() {
+        std::fs::remove_dir_all(&sessions)
+            .with_context(|| format!("apagando {}", sessions.display()))?;
+    }
+    std::fs::create_dir_all(&sessions)?;
+    let db = base.join("user.db");
+    if db.exists() {
+        std::fs::remove_file(&db).with_context(|| format!("apagando {}", db.display()))?;
+    }
+    let out = coach_out_dir();
+    if out.exists() {
+        std::fs::remove_dir_all(&out).with_context(|| format!("apagando {}", out.display()))?;
+    }
+    Ok(())
 }
 
 /// Abre um arquivo com o app padrão do Windows (ex.: report.html no navegador).

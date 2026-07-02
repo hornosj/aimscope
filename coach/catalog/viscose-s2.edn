@@ -1,70 +1,223 @@
-;; Catálogo Viscose S2 — SEED de 2026-07-01 via API oficial kovaaks.com
-;; (scenario/popular?scenarioNameSearch=viscose, 349 cenários; famílias × tiers
-;; Entry/Easier/base/Medium/Hard/Advanced/Expert identificadas).
+;; Catálogo Viscose S2 — SEED de 2026-07-01 via API oficial kovaaks.com;
+;; REMODELADO 2026-07-02 (QA do JP): uma entrada por SUBSKILL da taxonomia
+;; oficial do bench (4 categorias × subcategorias = 14 folhas), com os
+;; cenários da planilha do bench casados por regex. A subskill dominante da
+;; entrada é o :drill/for dela — este arquivo é a FONTE do vocabulário.
 ;;
-;; :skills = prior curado (mesma ressalva do VT). :rank-thresholds pendentes
-;; (sheet oficial). Cada entrada casa a FAMÍLIA em todos os tiers via regex.
+;; :thresholds (fim do arquivo) = RÉGUA por NOME EXATO, escala :percentile
+;; (nível = 100 - top%, do header evxl da sheet; ranges viram ponto médio).
+;; Satin/Silk (Hard) NÃO têm % na sheet — nível ESTIMADO (~96/98) por
+;; interpolação da escada; o tier Expert ficou TODO FORA (ordinal, sem
+;; população). Semeado 2026-07-02.
 {:benchmark :viscose-s2
- :thresholds/source :pending
+ :thresholds/source "viscose seed.xlsx (evxl percentis; easier/medium/hard)"
  :scenarios
- [;; ---------------- TRACKING ----------------
-  {:id :vs/smoothsphere :match "(?i)smoothsphere.*viscose" :category :tracking :subcategory :smooth
-   :skills {:tracking/smooth-arm 0.55 :consistency/endurance 0.25 :stability/tremor 0.20}
+ [;; ============ CONTROL TRACKING (suavidade sustentada) ============
+  {:id :vs/ct-arm :match "(?i)smoothsphere viscose|whisphere viscose|smoothbot perfected"
+   :category :tracking :subcategory :arm
+   :skills {:control-tracking/arm 0.60 :control-tracking/blending 0.25 :control-tracking/wrist 0.15}
    :amplitude :large :target-kinematics :constant-vel :muscle {:arm 0.9 :wrist 0.1}
-   :drill/for [:tracking/smooth-arm]}
+   :drill/for [:control-tracking/arm]}
 
-  {:id :vs/whisphere :match "(?i)whisphere.*viscose" :category :tracking :subcategory :smooth
-   :skills {:tracking/smooth-arm 0.45 :tracking/smooth-wrist 0.30 :consistency/endurance 0.25}
-   :amplitude :large :target-kinematics :constant-vel :muscle {:arm 0.7 :wrist 0.3}
-   :drill/for [:tracking/smooth-arm :tracking/smooth-wrist]}
+  {:id :vs/ct-wrist :match "(?i)leapstrafes control|controlsphere superbaim|vt controlsphere viscose"
+   :category :tracking :subcategory :wrist
+   :skills {:control-tracking/wrist 0.60 :control-tracking/arm 0.20 :reactive-tracking/control 0.20}
+   :amplitude :medium :target-kinematics :constant-vel :muscle {:wrist 0.8 :arm 0.2}
+   :drill/for [:control-tracking/wrist]}
 
-  {:id :vs/controlsphere :match "(?i)controlsphere.*viscose" :category :tracking :subcategory :control
-   :skills {:tracking/smooth-arm 0.40 :orientation/spatial 0.30 :tracking/reactive 0.30}
-   :amplitude :large :target-kinematics :erratic :muscle {:arm 0.8 :wrist 0.2}}
+  {:id :vs/ct-fingertip :match "(?i)air angelic|cloverrawcontrol|flower.*50cm"
+   :category :tracking :subcategory :fingertip
+   :skills {:control-tracking/fingertip 0.60 :control-tracking/wrist 0.25 :control-tracking/blending 0.15}
+   :amplitude :small :target-kinematics :constant-vel :muscle {:fingers 0.6 :wrist 0.4}
+   :drill/for [:control-tracking/fingertip]}
 
-  {:id :vs/raw-control :match "(?i)rawcontrol.*viscose|raw.?control.*viscose" :category :tracking :subcategory :control
-   :skills {:tracking/reactive 0.40 :tracking/smooth-arm 0.35 :consistency/endurance 0.25}
-   :amplitude :large :target-kinematics :erratic :muscle {:arm 0.8 :wrist 0.2}
-   :drill/for [:tracking/reactive]}
+  {:id :vs/ct-blending :match "(?i)vt preciseorb.*slower|air celestial|rawcontrolsphere|pgti voltaic"
+   :category :tracking :subcategory :blending
+   :skills {:control-tracking/blending 0.60 :control-tracking/arm 0.20 :control-tracking/fingertip 0.20}
+   :amplitude :large :target-kinematics :erratic :muscle {:arm 0.5 :wrist 0.3 :fingers 0.2}
+   :drill/for [:control-tracking/blending]}
 
-  {:id :vs/narrow-strafes :match "(?i)narrow.?strafes.*viscose" :category :tracking :subcategory :reactive
-   :skills {:tracking/reactive 0.50 :reaction/choice 0.25 :tracking/smooth-wrist 0.25}
-   :amplitude :small :target-kinematics :strafing :muscle {:wrist 0.8 :fingers 0.2}
-   :drill/for [:tracking/reactive]}
+  ;; ============ REACTIVE TRACKING (alvo imprevisível) ============
+  {:id :vs/rt-control :match "(?i)ground plaza|air spectral"
+   :category :tracking :subcategory :reactive-control
+   :skills {:reactive-tracking/control 0.60 :control-tracking/wrist 0.20 :reactive-tracking/reading 0.20}
+   :amplitude :small :target-kinematics :erratic :muscle {:wrist 0.7 :fingers 0.3}
+   :drill/for [:reactive-tracking/control]}
 
-  {:id :vs/plaza :match "(?i)plaza.*viscose" :category :tracking :subcategory :precise
-   :skills {:tracking/smooth-wrist 0.40 :stability/tremor 0.30 :precision/micro-adjust 0.30}
-   :amplitude :small :target-kinematics :strafing :muscle {:wrist 0.8 :fingers 0.2}
-   :drill/for [:stability/tremor]}
+  {:id :vs/rt-speed :match "(?i)vt aether|plink palace"
+   :category :tracking :subcategory :reactive-speed
+   :skills {:reactive-tracking/speed 0.60 :reactive-tracking/control 0.25 :control-tracking/arm 0.15}
+   :amplitude :large :target-kinematics :erratic :muscle {:arm 0.7 :wrist 0.3}
+   :drill/for [:reactive-tracking/speed]}
 
-  {:id :vs/air-angelic :match "(?i)air.?angelic.*viscose|vt air viscose" :category :tracking :subcategory :smooth
-   :skills {:tracking/smooth-arm 0.45 :orientation/spatial 0.30 :consistency/endurance 0.25}
-   :amplitude :large :target-kinematics :constant-vel :muscle {:arm 0.85 :wrist 0.15}}
+  {:id :vs/rt-reading :match "(?i)air pure|air voltaic invincible"
+   :category :tracking :subcategory :reactive-reading
+   :skills {:reactive-tracking/reading 0.60 :reactive-tracking/control 0.25 :control-tracking/blending 0.15}
+   :amplitude :large :target-kinematics :erratic :muscle {:arm 0.7 :wrist 0.3}
+   :drill/for [:reactive-tracking/reading]}
 
-  ;; ---------------- CLICKING ----------------
-  {:id :vs/floating-heads :match "(?i)floating.?heads.*viscose" :category :clicking :subcategory :linear
-   :skills {:acquisition/ballistic 0.40 :click/timing 0.30 :reaction/simple 0.15 :precision/micro-adjust 0.15}
-   :amplitude :medium :target-kinematics :strafing :muscle {:wrist 0.6 :arm 0.4}}
+  ;; ============ FLICK TECH (o arremesso da mira) ============
+  {:id :vs/ft-speed :match "(?i)ww\\dt voltaic|voxtargetswitch|aimerz\\+ static switching"
+   :category :switching :subcategory :flick-speed
+   :skills {:flick-tech/speed 0.60 :flick-tech/stability 0.25 :click-timing/precision 0.15}
+   :amplitude :medium :target-kinematics :static :muscle {:wrist 0.7 :arm 0.3}
+   :drill/for [:flick-tech/speed]}
 
-  {:id :vs/bounceshot :match "(?i)bounceshot.*viscose" :category :clicking :subcategory :dynamic
-   :skills {:click/timing 0.35 :acquisition/ballistic 0.30 :reaction/simple 0.20 :orientation/spatial 0.15}
+  {:id :vs/ft-stability :match "(?i)1w6ts reload|beants|staticswitchingvox"
+   :category :switching :subcategory :flick-stability
+   :skills {:flick-tech/stability 0.60 :flick-tech/speed 0.20 :flick-tech/post-flick 0.20}
+   :amplitude :medium :target-kinematics :static :muscle {:wrist 0.7 :arm 0.3}
+   :drill/for [:flick-tech/stability]}
+
+  {:id :vs/ft-micro :match "(?i)1w2ts reload|eth pasu micro|waldots"
+   :category :switching :subcategory :flick-micro
+   :skills {:flick-tech/micro 0.60 :flick-tech/stability 0.20 :click-timing/precision 0.20}
+   :amplitude :small :target-kinematics :static :muscle {:wrist 0.6 :fingers 0.4}
+   :drill/for [:flick-tech/micro]}
+
+  {:id :vs/ft-post-flick :match "(?i)kints voltaic|domiswitch|b180t voltaic"
+   :category :switching :subcategory :post-flick
+   :skills {:flick-tech/post-flick 0.60 :flick-tech/speed 0.20 :flick-tech/micro 0.20}
+   :amplitude :large :target-kinematics :static :muscle {:arm 0.6 :wrist 0.4}
+   :drill/for [:flick-tech/post-flick]}
+
+  ;; ============ CLICK TIMING (o instante do disparo) ============
+  {:id :vs/clk-reading :match "(?i)pasu voltaic reload|bounceshot viscose|catclick"
+   :category :clicking :subcategory :click-reading
+   :skills {:click-timing/reading 0.60 :flick-tech/stability 0.20 :click-timing/precision 0.20}
    :amplitude :medium :target-kinematics :erratic :muscle {:wrist 0.6 :arm 0.4}
-   :drill/for [:click/timing]}
+   :drill/for [:click-timing/reading]}
 
-  {:id :vs/psalm-click :match "(?i)psalmts.*viscose" :category :clicking :subcategory :dynamic
-   :skills {:acquisition/ballistic 0.40 :click/timing 0.35 :precision/micro-adjust 0.25}
-   :amplitude :medium :target-kinematics :strafing :muscle {:wrist 0.7 :arm 0.3}}
+  {:id :vs/clk-precision :match "(?i)1w3ts pasu perfected|popcorn mv|skyclick goated"
+   :category :clicking :subcategory :click-precision
+   :skills {:click-timing/precision 0.60 :flick-tech/micro 0.25 :click-timing/stability 0.15}
+   :amplitude :small :target-kinematics :strafing :muscle {:wrist 0.6 :fingers 0.4}
+   :drill/for [:click-timing/precision]}
 
-  {:id :vs/pasu :match "(?i)pasu.*viscose" :category :clicking :subcategory :dynamic
-   :skills {:acquisition/ballistic 0.40 :click/timing 0.30 :precision/micro-adjust 0.20 :reaction/simple 0.10}
-   :amplitude :medium :target-kinematics :strafing :muscle {:wrist 0.6 :arm 0.4}}
+  {:id :vs/clk-stability :match "(?i)voxts click|floating.?heads.*viscose|psalmts viscose"
+   :category :clicking :subcategory :click-stability
+   :skills {:click-timing/stability 0.60 :click-timing/reading 0.20 :flick-tech/stability 0.20}
+   :amplitude :medium :target-kinematics :strafing :muscle {:wrist 0.7 :arm 0.3}
+   :drill/for [:click-timing/stability]}]
 
-  ;; ---------------- SWITCHING ----------------
-  {:id :vs/vox-ts :match "(?i)voxts.*viscose" :category :switching :subcategory :speed
-   :skills {:acquisition/ballistic 0.35 :click/timing 0.30 :orientation/spatial 0.20 :precision/micro-adjust 0.15}
-   :amplitude :medium :target-kinematics :static :muscle {:wrist 0.6 :arm 0.4}}
-
-  {:id :vs/sky-ts :match "(?i)skyts.*viscose" :category :switching :subcategory :evasive
-   :skills {:orientation/spatial 0.35 :acquisition/ballistic 0.30 :tracking/reactive 0.20 :click/timing 0.15}
-   :amplitude :large :target-kinematics :erratic :muscle {:arm 0.6 :wrist 0.4}
-   :drill/for [:orientation/spatial]}]}
+ :thresholds
+ {;; --- easier ---
+  "Smoothsphere Viscose Easier" {:scale :percentile :points [[1 5500] [4 6500] [9 8050] [14 9200] [20 10200] [28 11400] [40 12300] [52 13050] [62.5 13600]]}
+  "Whisphere Viscose Easier" {:scale :percentile :points [[1 6800] [4 9400] [9 10300] [14 11100] [20 12800] [28 14500] [40 16200] [52 17500] [62.5 18500]]}
+  "SmoothBot Perfected Easier" {:scale :percentile :points [[1 2000] [4 2500] [9 3000] [14 3350] [20 3650] [28 4100] [40 4500] [52 4775] [62.5 5025]]}
+  "Leapstrafes Control wobin Easier" {:scale :percentile :points [[1 1200] [4 1600] [9 2025] [14 2250] [20 2450] [28 2750] [40 3000] [52 3250] [62.5 3450]]}
+  "Controlsphere SuperbAim Viscose Easier" {:scale :percentile :points [[1 4200] [4 5100] [9 6200] [14 7050] [20 7975] [28 9050] [40 10000] [52 10800] [62.5 11750]]}
+  "VT Controlsphere Viscose Easier" {:scale :percentile :points [[1 1100] [4 1600] [9 2100] [14 2450] [20 2750] [28 3175] [40 3500] [52 3800] [62.5 4100]]}
+  "Air Angelic 4 Voltaic Easy 70%" {:scale :percentile :points [[1 2600] [4 3050] [9 3575] [14 3950] [20 4175] [28 4475] [40 4700] [52 4850] [62.5 5100]]}
+  "cloverRawControl Viscose Easier 50cm" {:scale :percentile :points [[1 5000] [4 5850] [9 6400] [14 7100] [20 7800] [28 9200] [40 10000] [52 10700] [62.5 11500]]}
+  "Flower Easier 50cm" {:scale :percentile :points [[1 1050] [4 1350] [9 1650] [14 2000] [20 2350] [28 2575] [40 2875] [52 3200] [62.5 3475]]}
+  "PGTI Voltaic Easy Smoother" {:scale :percentile :points [[1 550] [4 700] [9 1050] [14 1200] [20 1375] [28 1675] [40 1950] [52 2250] [62.5 2500]]}
+  "Air CELESTIAL No UFO Easier" {:scale :percentile :points [[1 800] [4 817] [9 842] [14 852] [20 862] [28 873] [40 882.5] [52 889] [62.5 895.5]]}
+  "RawControlSphere Easier" {:scale :percentile :points [[1 4700] [4 5900] [9 7400] [14 8200] [20 8900] [28 10400] [40 11000] [52 12300] [62.5 13200]]}
+  "Ground Plaza Sparky V3 Easy" {:scale :percentile :points [[1 780] [4 805] [9 833] [14 845] [20 854] [28 866] [40 876] [52 884] [62.5 889]]}
+  "Air Spectral Easy 85%" {:scale :percentile :points [[1 870] [4 895] [9 907] [14 913] [20 917] [28 922] [40 926] [52 929] [62.5 932]]}
+  "VT Aether Bot 1 Easier" {:scale :percentile :points [[1 1200] [4 1600] [9 1850] [14 2100] [20 2400] [28 2700] [40 3000] [52 3250] [62.5 3475]]}
+  "Plink Palace Easy Less Blinks" {:scale :percentile :points [[1 1300] [4 1600] [9 2000] [14 2175] [20 2300] [28 2525] [40 2775] [52 2925] [62.5 3100]]}
+  "Air Pure Easier No UFO" {:scale :percentile :points [[1 875] [4 895] [9 912] [14 919] [20 923] [28 928] [40 933] [52 937] [62.5 940]]}
+  "Air Voltaic Invincible 4 Easier" {:scale :percentile :points [[1 1750] [4 2350] [9 2800] [14 3050] [20 3200] [28 3500] [40 3900] [52 4100] [62.5 4250]]}
+  "ww5t voltaic slightly larger" {:scale :percentile :points [[1 70] [4 80] [9 92] [14 97] [20 101] [28 108] [40 113] [52 119] [62.5 125]]}
+  "voxtargetswitch 2 large" {:scale :percentile :points [[1 59] [4 68] [9 78] [14 84] [20 92] [28 99] [40 106] [52 113] [62.5 120]]}
+  "aimerz+ static switching 6 bot slightly larger" {:scale :percentile :points [[1 78] [4 89] [9 98] [14 103] [20 109] [28 115] [40 121] [52 126] [62.5 131]]}
+  "1w6ts reload v2 20% bigger" {:scale :percentile :points [[1 64] [4 71] [9 78] [14 85] [20 91] [28 97] [40 103] [52 109] [62.5 115]]}
+  "beanTS Larger" {:scale :percentile :points [[1 53] [4 64] [9 75] [14 86] [20 96] [28 106] [40 116] [52 126] [62.5 137]]}
+  "StaticSwitchingVox" {:scale :percentile :points [[1 67] [4 76] [9 86] [14 91] [20 96] [28 101] [40 108] [52 114] [62.5 119]]}
+  "1w2ts reload smallflicks larger" {:scale :percentile :points [[1 76] [4 85] [9 93] [14 100] [20 106] [28 112] [40 118] [52 124] [62.5 130]]}
+  "eth pasu micro easier" {:scale :percentile :points [[1 600] [4 700] [9 775] [14 850] [20 925] [28 1000] [40 1075] [52 1150] [62.5 1225]]}
+  "waldots novice" {:scale :percentile :points [[1 51] [4 63] [9 74] [14 85] [20 96] [28 107] [40 118] [52 129] [62.5 140]]}
+  "kints voltaic easy 85%" {:scale :percentile :points [[1 35] [4 38] [9 44] [14 49] [20 54] [28 59] [40 63] [52 67] [62.5 72]]}
+  "domiswitch easier" {:scale :percentile :points [[1 3000] [4 3600] [9 4200] [14 4800] [20 5400] [28 6000] [40 6500] [52 7000] [62.5 7500]]}
+  "b180t voltaic easy slower" {:scale :percentile :points [[1 32] [4 37] [9 42] [14 47] [20 52] [28 57] [40 62] [52 67] [62.5 72]]}
+  "pasu voltaic reload easier" {:scale :percentile :points [[1 38] [4 46] [9 52] [14 59] [20 65] [28 72] [40 78] [52 84] [62.5 91]]}
+  "vt bounceshot viscose easier" {:scale :percentile :points [[1 300] [4 380] [9 460] [14 540] [20 610] [28 690] [40 750] [52 810] [62.5 870]]}
+  "catclick easier" {:scale :percentile :points [[1 27] [4 35] [9 42] [14 49] [20 56] [28 63] [40 69] [52 75] [62.5 80]]}
+  "1w3ts pasu perfected micro goated larger 80%" {:scale :percentile :points [[1 420] [4 530] [9 640] [14 750] [20 860] [28 970] [40 1080] [52 1190] [62.5 1300]]}
+  "popcorn mv easier" {:scale :percentile :points [[1 90] [4 150] [9 200] [14 240] [20 280] [28 320] [40 360] [52 390] [62.5 420]]}
+  "skyclick goated easier" {:scale :percentile :points [[1 60] [4 71] [9 80] [14 89] [20 95] [28 102] [40 107] [52 112] [62.5 117]]}
+  "voxts click easier" {:scale :percentile :points [[1 48] [4 57] [9 64] [14 72] [20 79] [28 86] [40 93] [52 99] [62.5 105]]}
+  "vt floating heads viscose easier" {:scale :percentile :points [[1 400] [4 500] [9 580] [14 645] [20 700] [28 790] [40 870] [52 930] [62.5 1015]]}
+  "psalmts viscose click easier" {:scale :percentile :points [[1 31] [4 39] [9 45] [14 51] [20 57] [28 63] [40 69] [52 74] [62.5 80]]}
+  ;; --- medium ---
+  "Smoothsphere Viscose" {:scale :percentile :points [[5 6000] [11 7700] [21 8900] [35 10100] [55 11200] [70 12050] [83 12800] [92.75 13700] [96.75 14400]]}
+  "Whisphere Viscose" {:scale :percentile :points [[5 8600] [11 11000] [21 13000] [35 14750] [55 16750] [70 18250] [83 19750] [92.75 21350] [96.75 22750]]}
+  "Smoothbot Perfected" {:scale :percentile :points [[5 2450] [11 3225] [21 3725] [35 4200] [55 4600] [70 4950] [83 5300] [92.75 5650] [96.75 5950]]}
+  "Leapstrafes Control wobin" {:scale :percentile :points [[5 1750] [11 2200] [21 2500] [35 2850] [55 3200] [70 3425] [83 3700] [92.75 4000] [96.75 4300]]}
+  "Controlsphere SuperbAim Viscose" {:scale :percentile :points [[5 6500] [11 8050] [21 9150] [35 10000] [55 11000] [70 11900] [83 12750] [92.75 13600] [96.75 14500]]}
+  "VT Controlsphere Viscose" {:scale :percentile :points [[5 1450] [11 1975] [21 2350] [35 2725] [55 3075] [70 3400] [83 3700] [92.75 4050] [96.75 4390]]}
+  "Air Angelic 4 Voltaic Easy 90%" {:scale :percentile :points [[5 2375] [11 2825] [21 3150] [35 3450] [55 3700] [70 3925] [83 4125] [92.75 4360] [96.75 4550]]}
+  "cloverRawControl Viscose 50cm" {:scale :percentile :points [[5 4950] [11 6250] [21 7350] [35 8500] [55 9500] [70 10400] [83 11300] [92.75 12100] [96.75 13050]]}
+  "Flower 50cm" {:scale :percentile :points [[5 1400] [11 1875] [21 2200] [35 2500] [55 2825] [70 3175] [83 3500] [92.75 3900] [96.75 4275]]}
+  "VT PreciseOrb Intermediate 15% Slower" {:scale :percentile :points [[5 1000] [11 1400] [21 1700] [35 1975] [55 2225] [70 2500] [83 2725] [92.75 3000] [96.75 3250]]}
+  "Air CELESTIAL No UFO Medium" {:scale :percentile :points [[5 817] [11 847] [21 863] [35 877] [55 886] [70 893] [83 900] [92.75 906] [96.75 911]]}
+  "RawControlSphere" {:scale :percentile :points [[5 6600] [11 8150] [21 9300] [35 10500] [55 11300] [70 12100] [83 13100] [92.75 14075] [96.75 14900]]}
+  "Ground Plaza Sparky v3" {:scale :percentile :points [[5 850] [11 860] [21 870] [35 879] [55 886] [70 892.5] [83 899] [92.75 904.5] [96.75 909]]}
+  "Air Spectral Easy" {:scale :percentile :points [[5 890] [11 903] [21 910] [35 916] [55 921] [70 925] [83 929] [92.75 932.5] [96.75 935]]}
+  "VT Aether Novice S5 Hard Bot 1 90%" {:scale :percentile :points [[5 1575] [11 2150] [21 2500] [35 2800] [55 3075] [70 3350] [83 3575] [92.75 3825] [96.75 4025]]}
+  "Plink Palace Easy" {:scale :percentile :points [[5 1825] [11 2250] [21 2500] [35 2675] [55 2875] [70 3025] [83 3250] [92.75 3450] [96.75 3625]]}
+  "Air Pure Medium" {:scale :percentile :points [[5 870] [11 888] [21 898] [35 904] [55 910.5] [70 915.5] [83 921] [92.75 926] [96.75 930]]}
+  "Air Voltaic Invincible 4 Medium" {:scale :percentile :points [[5 2275] [11 2700] [21 3025] [35 3300] [55 3575] [70 3850] [83 4075] [92.75 4375] [96.75 4600]]}
+  "ww4t voltaic" {:scale :percentile :points [[5 90] [11 102] [21 112] [35 118] [55 126] [70 133] [83 141] [92.75 152] [96.75 160]]}
+  "voxtargetswitch 2" {:scale :percentile :points [[5 69] [11 78] [21 87] [35 96] [55 105] [70 115] [83 122] [92.75 129] [96.75 135]]}
+  "aimerz+ static switching 5 bot slightly larger" {:scale :percentile :points [[5 101] [11 111] [21 120] [35 126] [55 133] [70 139] [83 145] [92.75 153] [96.75 161]]}
+  "1w6ts reload v2" {:scale :percentile :points [[5 70] [11 82] [21 94] [35 105] [55 116] [70 123] [83 130] [92.75 138] [96.75 146]]}
+  "beanTS" {:scale :percentile :points [[5 80] [11 91] [21 102] [35 113] [55 125] [70 134] [83 142] [92.75 148] [96.75 155]]}
+  "staticswitchingvox small" {:scale :percentile :points [[5 91] [11 101] [21 111] [35 119] [55 126] [70 133] [83 138] [92.75 142] [96.75 147]]}
+  "1w2ts reload smallflicks slightly larger" {:scale :percentile :points [[5 99] [11 109] [21 119] [35 127] [55 135] [70 142] [83 150] [92.75 161] [96.75 169]]}
+  "eth pasu micro medium" {:scale :percentile :points [[5 850] [11 975] [21 1050] [35 1150] [55 1250] [70 1300] [83 1400] [92.75 1525] [96.75 1650]]}
+  "waldots intermediate" {:scale :percentile :points [[5 92] [11 104] [21 115] [35 126] [55 136] [70 144] [83 154] [92.75 163] [96.75 171]]}
+  "kints voltaic easy" {:scale :percentile :points [[5 42] [11 49] [21 55] [35 61] [55 67] [70 72] [83 76] [92.75 81] [96.75 86]]}
+  "domiswitch easy" {:scale :percentile :points [[5 3600] [11 4200] [21 4700] [35 5200] [55 5700] [70 6200] [83 6700] [92.75 7200] [96.75 7700]]}
+  "b180t voltaic easy" {:scale :percentile :points [[5 40] [11 49] [21 56] [35 63] [55 69] [70 75] [83 81] [92.75 86] [96.75 91]]}
+  "pasu voltaic reload easy" {:scale :percentile :points [[5 51] [11 64] [21 72] [35 80] [55 88] [70 96] [83 103] [92.75 112] [96.75 121]]}
+  "vt bounceshot viscose medium" {:scale :percentile :points [[5 420] [11 540] [21 600] [35 690] [55 770] [70 850] [83 920] [92.75 1010] [96.75 1100]]}
+  "catclick medium" {:scale :percentile :points [[5 39] [11 49] [21 56] [35 63] [55 70] [70 77] [83 84] [92.75 95] [96.75 103]]}
+  "1w3ts pasu perfected micro goated larger" {:scale :percentile :points [[5 790] [11 850] [21 975] [35 1075] [55 1175] [70 1275] [83 1400] [92.75 1550] [96.75 1650]]}
+  "popcorn mv medium" {:scale :percentile :points [[5 160] [11 220] [21 260] [35 310] [55 350] [70 390] [83 440] [92.75 490] [96.75 540]]}
+  "skyclick goated medium" {:scale :percentile :points [[5 83] [11 91] [21 100] [35 109] [55 117] [70 125] [83 132] [92.75 143] [96.75 152]]}
+  "voxts click medium" {:scale :percentile :points [[5 62] [11 74] [21 81] [35 89] [55 96] [70 103] [83 110] [92.75 119] [96.75 127]]}
+  "vt floating heads viscose medium" {:scale :percentile :points [[5 475] [11 575] [21 650] [35 750] [55 825] [70 900] [83 975] [92.75 1085] [96.75 1200]]}
+  "psalmts viscose click" {:scale :percentile :points [[5 46] [11 56] [21 62] [35 69] [55 75] [70 81] [83 88] [92.75 96] [96.75 104]]}
+  ;; --- hard (Satin/Silk = níveis 96/98 ESTIMADOS) ---
+  "Smoothsphere Viscose Hard" {:scale :percentile :points [[50 9000] [63 9800] [76 10600] [85 11250] [91 11900] [94 12300] [96 12900] [98 13400]]}
+  "Whisphere Viscose Hard" {:scale :percentile :points [[50 15250] [63 16500] [76 17500] [85 18500] [91 19500] [94 20500] [96 21250] [98 22250]]}
+  "Smoothbot Perfected Hard" {:scale :percentile :points [[50 4050] [63 4300] [76 4600] [85 4850] [91 5100] [94 5350] [96 5550] [98 5750]]}
+  "Leapstrafes Control wobin Hard" {:scale :percentile :points [[50 2850] [63 3100] [76 3300] [85 3500] [91 3700] [94 3875] [96 4050] [98 4200]]}
+  "Controlsphere SuperbAim Viscose Hard" {:scale :percentile :points [[50 9600] [63 10700] [76 11300] [85 11900] [91 12500] [94 13000] [96 13500] [98 14000]]}
+  "VT Controlsphere Viscose Hard" {:scale :percentile :points [[50 2700] [63 3000] [76 3250] [85 3500] [91 3750] [94 3975] [96 4250] [98 4475]]}
+  "Air Angelic 4 Voltaic 90%" {:scale :percentile :points [[50 3400] [63 3650] [76 3850] [85 4025] [91 4200] [94 4375] [96 4500] [98 4625]]}
+  "cloverRawControl Viscose Hard 50cm" {:scale :percentile :points [[50 7900] [63 8500] [76 9150] [85 9850] [91 10650] [94 11100] [96 11550] [98 12100]]}
+  "Flower Hard 50cm" {:scale :percentile :points [[50 2675] [63 2950] [76 3150] [85 3425] [91 3700] [94 3925] [96 4100] [98 4325]]}
+  "PGTI Voltaic Slower - 80%" {:scale :percentile :points [[50 1800] [63 2100] [76 2400] [85 2700] [91 2950] [94 3175] [96 3400] [98 3625]]}
+  "Air CELESTIAL Harder" {:scale :percentile :points [[50 850] [63 865] [76 873] [85 880] [91 885] [94 890] [96 894] [98 897.5]]}
+  "RawControlSphere Hard" {:scale :percentile :points [[50 10800] [63 11600] [76 12300] [85 13000] [91 13650] [94 14150] [96 14650] [98 15100]]}
+  "Ground Plaza Sparky v3 Viscose Hard" {:scale :percentile :points [[50 888] [63 894] [76 898] [85 903] [91 906] [94 908] [96 910] [98 912]]}
+  "Air Spectral" {:scale :percentile :points [[50 897] [63 908] [76 912] [85 917] [91 921] [94 924] [96 927] [98 929.5]]}
+  "VT Aether Intermediate S5 Hard Bot 1" {:scale :percentile :points [[50 2300] [63 2600] [76 2850] [85 3100] [91 3250] [94 3400] [96 3550] [98 3700]]}
+  "Plink Palace" {:scale :percentile :points [[50 2800] [63 2925] [76 3075] [85 3225] [91 3350] [94 3425] [96 3500] [98 3575]]}
+  "Air Pure Harder" {:scale :percentile :points [[50 892] [63 897] [76 902] [85 906] [91 910] [94 913] [96 915] [98 916.5]]}
+  "Air Voltaic Invincible 4 Slightly Slower" {:scale :percentile :points [[50 3125] [63 3325] [76 3525] [85 3725] [91 3925] [94 4050] [96 4125] [98 4250]]}
+  "ww3t voltaic" {:scale :percentile :points [[50 132] [63 139] [76 146] [85 152] [91 158] [94 164] [96 170] [98 175]]}
+  "voxtargetswitch 2 10% smaller" {:scale :percentile :points [[50 108] [63 114] [76 118] [85 123] [91 127] [94 132] [96 136] [98 140]]}
+  "aimerz+ static switching 5 bot" {:scale :percentile :points [[50 130] [63 135] [76 140] [85 145] [91 150] [94 154] [96 158] [98 162]]}
+  "1w5ts reload" {:scale :percentile :points [[50 117] [63 125] [76 133] [85 140] [91 146] [94 152] [96 158] [98 164]]}
+  "beants 200%" {:scale :percentile :points [[50 123] [63 129] [76 135] [85 140] [91 145] [94 150] [96 155] [98 160]]}
+  "staticswitchingvox xsmall" {:scale :percentile :points [[50 110] [63 118] [76 124] [85 130] [91 136] [94 142] [96 146] [98 151]]}
+  "1w2ts reload smallflicks" {:scale :percentile :points [[50 150] [63 156] [76 162] [85 167] [91 172] [94 176] [96 180] [98 184]]}
+  "eth pasu micro hard" {:scale :percentile :points [[50 1250] [63 1360] [76 1425] [85 1525] [91 1600] [94 1675] [96 1750] [98 1825]]}
+  "waldots" {:scale :percentile :points [[50 135] [63 143] [76 150] [85 156] [91 162] [94 168] [96 174] [98 178]]}
+  "kints voltaic" {:scale :percentile :points [[50 65] [63 70] [76 75] [85 80] [91 84] [94 88] [96 91] [98 94]]}
+  "domiswitch" {:scale :percentile :points [[50 5200] [63 5600] [76 6000] [85 6400] [91 6700] [94 7000] [96 7200] [98 7400]]}
+  "b180t voltaic" {:scale :percentile :points [[50 67] [63 73] [76 78] [85 83] [91 87] [94 91] [96 94] [98 97]]}
+  "pasu voltaic reload" {:scale :percentile :points [[50 80] [63 88] [76 94] [85 102] [91 108] [94 112] [96 116] [98 120]]}
+  "vt bounceshot viscose hard" {:scale :percentile :points [[50 700] [63 790] [76 860] [85 920] [91 980] [94 1040] [96 1100] [98 1190]]}
+  "catclick" {:scale :percentile :points [[50 70] [63 77] [76 84] [85 90] [91 96] [94 102] [96 107] [98 112]]}
+  "1w3ts pasu perfected micro goated" {:scale :percentile :points [[50 980] [63 1070] [76 1160] [85 1250] [91 1340] [94 1430] [96 1520] [98 1580]]}
+  "popcorn mv hard" {:scale :percentile :points [[50 330] [63 370] [76 400] [85 440] [91 490] [94 530] [96 560] [98 610]]}
+  "skyclick goated hard" {:scale :percentile :points [[50 119] [63 125] [76 130] [85 138] [91 145] [94 150] [96 156] [98 164]]}
+  "voxts click medium 10% smaller" {:scale :percentile :points [[50 99] [63 105] [76 113] [85 120] [91 124] [94 128] [96 135] [98 142]]}
+  "vt floating heads viscose hard" {:scale :percentile :points [[50 780] [63 875] [76 940] [85 1020] [91 1100] [94 1150] [96 1200] [98 1260]]}
+  "psalmts viscose click hard" {:scale :percentile :points [[50 71] [63 78] [76 84] [85 90] [91 96] [94 102] [96 109] [98 114]]}}}

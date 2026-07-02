@@ -4,6 +4,10 @@
   (:require [clojure.test :refer [deftest is testing]]
             [aimscope.coach.catalog :as cat]
             [aimscope.coach.csvstats :as csv]
+            [aimscope.coach.labels :as labels]
+            [aimscope.coach.narrative :as nar]
+            [aimscope.coach.objective :as obj]
+            [aimscope.coach.placement :as placement]
             [aimscope.coach.plan :as plan]
             [aimscope.coach.residual :as residual]
             [aimscope.coach.skills :as skills])
@@ -18,11 +22,13 @@
   (is (nil? (cat/match-scenario catalog "mapa desconhecido qualquer"))))
 
 (deftest viscose-vence-vt-quando-nome-tem-viscose
-  ;; ordem de match: viscose (específico) antes do VT (genérico)
-  (is (= :vs/controlsphere (:id (cat/match-scenario catalog "VT Controlsphere Viscose Hard"))))
-  (is (= :vs/pasu          (:id (cat/match-scenario catalog "VT Pasu Viscose Advanced S5"))))
-  (is (= :vs/smoothsphere  (:id (cat/match-scenario catalog "Smoothsphere Viscose Easier"))))
-  ;; sem "viscose" no nome, cai nas entradas genéricas
+  ;; ordem de match: viscose (subskills da taxonomia) antes do VT (genérico)
+  (is (= :vs/ct-wrist (:id (cat/match-scenario catalog "VT Controlsphere Viscose Hard"))))
+  (is (= :vs/ct-arm   (:id (cat/match-scenario catalog "Smoothsphere Viscose Easier"))))
+  (is (= :vs/clk-reading (:id (cat/match-scenario catalog "Pasu Voltaic Reload Easy"))))
+  (is (= :vs/ft-post-flick (:id (cat/match-scenario catalog "B180T Voltaic Easy"))))
+  ;; nome fora da planilha viscose cai nas entradas genéricas
+  (is (= :vt/pasu (:id (cat/match-scenario catalog "VT Pasu Viscose Advanced S5"))))
   (is (= :vt/controlsphere (:id (cat/match-scenario catalog "VT Controlsphere Intermediate S5"))))
   (is (= :com/smoothsphere (:id (cat/match-scenario catalog "Smoothsphere")))))
 
@@ -38,18 +44,21 @@
       (is (clojure.string/starts-with? (:played-at r) "2026-07-01T13:31:04")))))
 
 (def skills-braço-fraco
-  ;; punho ótimo, braço péssimo — o cenário do exemplo do JP
-  {:tracking/smooth-wrist  {:value 78.0 :confidence 0.8 :n 5}
-   :tracking/smooth-arm    {:value 31.0 :confidence 0.7 :n 5}
-   :precision/micro-adjust {:value 74.0 :confidence 0.8 :n 5}
-   :click/timing           {:value 70.0 :confidence 0.6 :n 5}
-   :orientation/spatial    {:value 65.0 :confidence 0.6 :n 5}
-   :acquisition/ballistic  {:value 72.0 :confidence 0.8 :n 5}
-   :stability/tremor       {:value 68.0 :confidence 0.7 :n 5}
-   :tracking/reactive      {:value 60.0 :confidence 0.5 :n 3}
-   :consistency/endurance  {:value 62.0 :confidence 0.4 :n 3}
-   :reaction/simple        {:value nil :confidence 0.0 :n 0}
-   :reaction/choice        {:value nil :confidence 0.0 :n 0}})
+  ;; punho ótimo, braço péssimo — o cenário do exemplo do JP (taxonomia Viscose)
+  {:control-tracking/wrist     {:value 78.0 :confidence 0.8 :n 5}
+   :control-tracking/arm       {:value 31.0 :confidence 0.7 :n 5}
+   :control-tracking/fingertip {:value 68.0 :confidence 0.7 :n 5}
+   :control-tracking/blending  {:value 62.0 :confidence 0.4 :n 3}
+   :reactive-tracking/control  {:value 60.0 :confidence 0.5 :n 3}
+   :reactive-tracking/speed    {:value 61.0 :confidence 0.4 :n 3}
+   :reactive-tracking/reading  {:value 65.0 :confidence 0.6 :n 5}
+   :flick-tech/speed           {:value 70.0 :confidence 0.5 :n 3}
+   :flick-tech/stability       {:value 72.0 :confidence 0.8 :n 5}
+   :flick-tech/micro           {:value 74.0 :confidence 0.8 :n 5}
+   :flick-tech/post-flick      {:value 69.0 :confidence 0.6 :n 4}
+   :click-timing/reading       {:value nil :confidence 0.0 :n 0}
+   :click-timing/precision     {:value 70.0 :confidence 0.6 :n 5}
+   :click-timing/stability     {:value nil :confidence 0.0 :n 0}})
 
 (deftest exemplo-canonico-bounce-180
   (testing "braço fraco ⇒ plano p/ Bounce 180 prescreve drill de smooth-arm"
@@ -57,14 +66,17 @@
           p (plan/build-plan catalog {:player/goal :fixed-sens} skills-braço-fraco target)]
       (is (= :ok (:status p)))
       (let [scens (set (map :scenario (:steps p)))]
-        (is (some #{:com/smoothsphere :com/whisphere :com/smoothbot} scens)
-            (str "esperava drill de smooth-arm, veio: " scens)))
+        ;; o drill canônico de braço agora é a família ct-arm da Viscose
+        ;; (Smoothsphere/Whisphere/SmoothBot Perfected); os da comunidade
+        ;; continuam válidos como alternativa
+        (is (some #{:vs/ct-arm :com/smoothsphere :com/whisphere :com/smoothbot} scens)
+            (str "esperava drill de tracking de braço, veio: " scens)))
       (testing "fixed-sens: NUNCA prescreve mudança de sens"
         (is (not-any? #(= :sens-change (:tipo %)) (:steps p)))))))
 
 (deftest sens-range-permite-acao-de-sens
   (testing "no modo sens-range a mudança de sens EXISTE no espaço de busca"
-    (let [skills (assoc-in skills-braço-fraco [:precision/micro-adjust :value] 30.0)
+    (let [skills (assoc-in skills-braço-fraco [:flick-tech/micro :value] 30.0)
           target (first (filter #(= :vt/onewall-ts (:id %)) catalog))
           p-fixed (plan/build-plan catalog {:player/goal :fixed-sens} skills target)
           p-range (plan/build-plan catalog {:player/goal :sens-range} skills target)]
@@ -74,48 +86,230 @@
       ;; barato — aqui só validamos que o plano continua ok
       (is (= :ok (:status p-range))))))
 
-(deftest energia-vt-interpola-e-clampa
-  (let [th {:iron 500 :bronze 600 :silver 700 :gold 800}]
-    (is (= 50.0  (double (residual/energy th 250))))   ; abaixo do iron: 0->100
-    (is (= 100.0 (double (residual/energy th 500))))   ; exatamente iron
-    (is (= 150.0 (double (residual/energy th 550))))   ; meio iron->bronze
-    (is (= 400.0 (double (residual/energy th 800))))   ; gold
-    (is (= 1200.0 (double (residual/energy th 9999)))) ; teto
-    (is (nil? (residual/energy {} 500)))               ; :pending -> nil
-    (is (nil? (residual/energy nil 500)))))
+(deftest level-of-interpola-e-clampa
+  (let [pts [[100 500] [200 600] [300 700] [400 800]]] ; [energia score]
+    (is (= 50.0  (double (residual/level-of pts 250))))  ; abaixo do 1º: 0->100
+    (is (= 100.0 (double (residual/level-of pts 500))))  ; exatamente 1º ponto
+    (is (= 150.0 (double (residual/level-of pts 550))))  ; meio 100->200
+    (is (= 400.0 (double (residual/level-of pts 800))))  ; último ponto
+    (is (= 400.0 (double (residual/level-of pts 9999)))) ; acima: clampa no último
+    (is (nil? (residual/level-of [] 500)))
+    (is (nil? (residual/level-of nil 500)))))
+
+(deftest scaled-actual-normaliza-por-escala
+  ;; energia VT 0-1200 -> 0-100 (÷12); percentil passa direto
+  (is (= (/ 400.0 12.0)
+         (double (residual/scaled-actual {:scale :energy :points [[100 500] [400 800]]} 800))))
+  (is (= 62.5
+         (double (residual/scaled-actual {:scale :percentile :points [[1 5500] [62.5 13600]]} 13600))))
+  (is (nil? (residual/scaled-actual {:scale :energy :points []} 800))))
+
+(deftest thresholds-seed-carrega-e-pontua
+  ;; validade: valores conhecidos das sheets têm que sair exatos
+  (let [th (cat/load-thresholds)]
+    (let [pasu (cat/threshold-for th "VT Pasu Rasp Novice")]
+      (is (= :energy (:scale pasu)))
+      (is (= 400.0 (double (residual/level-of (:points pasu) 850))))   ; gold novice
+      (is (= (/ 400.0 12.0) (double (residual/scaled-actual pasu 850)))))
+    (let [adv (cat/threshold-for th "VT Smoothbot Advanced")]
+      (is (= 1200.0 (double (residual/level-of (:points adv) 4300))))) ; celestial
+    (let [ss (cat/threshold-for th "Smoothsphere Viscose Easier")]
+      (is (= :percentile (:scale ss)))
+      (is (= 62.5 (double (residual/scaled-actual ss 13600)))))        ; Seal 37.5%
+    ;; nome normaliza (caixa/espaços) e cenário sem régua -> nil
+    (is (some? (cat/threshold-for th "  vt   pasu rasp novice ")))
+    (is (nil? (cat/threshold-for th "cenário inexistente xyz")))))
+
+;; ---------------------------------------------------------------------------
+;; apresentação: rótulos, placement e narrativa (QA 2026-07-02 — zero jargão)
+;; ---------------------------------------------------------------------------
+
+(deftest labels-traduzem-todas-as-skills
+  (doseq [s (cat/all-skills)]
+    (is (not= (str s) (labels/skill-nome s)) (str "skill sem rótulo: " s))
+    (is (some? (labels/skill-dica s)) (str "skill sem dica: " s)))
+  ;; chave vinda de JSON (string) e desconhecida
+  (is (= "Flick: micro" (labels/skill-nome "flick-tech/micro")))
+  (is (= ":x/y" (labels/skill-nome :x/y)) "desconhecida não some, degrada visível"))
+
+(deftest labels-de-cenario-derivam-do-id
+  (is (= "Bounce 180" (labels/scenario-nome :com/bounce-180)))
+  (is (= "Bounce 180" (labels/scenario-nome "com/bounce-180")))
+  (is (= "Smoothsphere" (labels/scenario-nome :vs/smoothsphere))))
+
+(deftest placement-cobre-o-espaco-de-skills-com-reguas
+  (let [th (cat/load-thresholds)
+        catalog (cat/load-catalog)]
+    (doseq [{:keys [scenario]} placement/sequencia]
+      (is (some? (cat/threshold-for th scenario))
+          (str "cenário do placement sem régua semeada: " scenario))
+      (is (some? (cat/match-scenario catalog scenario))
+          (str "cenário do placement não casa no catálogo: " scenario)))
+    ;; as 11 skills aparecem em pelo menos um item? (cobertura declarada)
+    (let [medidas (set (mapcat :mede placement/sequencia))]
+      (is (>= (count medidas) 10)
+          (str "placement mede só " (count medidas) " skills")))))
+
+(deftest placement-status-marca-jogados
+  (let [st (placement/status [{:scenario "vt pasu rasp novice"}])]
+    (is (false? (:completo? st)))
+    (is (= (dec (count placement/sequencia)) (:faltam st)))
+    (is (true? (:jogado? (first (filter #(= "VT Pasu Rasp Novice" (:scenario %))
+                                        (:itens st))))))))
+
+(def ^:private dados-narrativa
+  {:diagnosis {:gargalo-global {:skill "reactive-tracking/reading" :value 33.4}
+               :skills/ranked [{:skill "flick-tech/micro" :value 87.4}
+                               {:skill "control-tracking/arm" :value 77.0}
+                               {:skill "reactive-tracking/reading" :value 33.4}]
+               :n-scores 42
+               :placement {:completo? false :faltam 2
+                           :itens [{:scenario "VT skyTS Novice" :jogado? false
+                                    :mede-labels ["Reativo: controle" "Reativo: velocidade"]}
+                                   {:scenario "VT Pasu Rasp Novice" :jogado? true
+                                    :mede-labels ["Flick: estabilidade"]}]}}
+   :plan {:status "ok" :target "com/bounce-180" :target-label "Bounce 180"
+          :steps [{:minutes 15 :scenario "com/bounce-180" :scenario-label "Bounce 180"
+                   :skill "reactive-tracking/reading" :expected-delta "+4"}]}
+   :outcome {:veredito-geral "progrediu" :recomendacao "previsão se confirmando"}})
+
+(deftest narrativa-deterministica-fala-lingua-de-gente
+  (let [md (nar/narrativa-deterministica dados-narrativa)]
+    (is (nar/narrativa-valida? md) "o próprio rascunho tem que passar no gate")
+    (is (clojure.string/includes? md "Reativo: leitura"))
+    (is (clojure.string/includes? md "Bounce 180"))
+    (is (clojure.string/includes? md "Teste inicial"))
+    (is (not (re-find nar/padrao-jargao md)) "zero chave interna no texto")))
+
+(deftest narrativa-valida-reprova-jargao-e-estrutura
+  (let [ok (nar/narrativa-deterministica dados-narrativa)]
+    (is (not (nar/narrativa-valida? (str ok "\nfoque em reactive-tracking/reading!")))
+        "jargão interno reprova")
+    (is (not (nar/narrativa-valida? "## Diagnóstico\ncurto demais")))
+    (is (not (nar/narrativa-valida? nil)))))
+
+(deftest narrativa-sem-dados-nao-quebra
+  (let [md (nar/narrativa-deterministica {})]
+    (is (string? md))
+    (is (clojure.string/includes? md "## Diagnóstico"))
+    (is (not (re-find nar/padrao-jargao md)))))
+
+;; ---------------------------------------------------------------------------
+;; objetivo em linguagem natural (CONTEXT.md: Objetivo)
+;; ---------------------------------------------------------------------------
+
+(deftest objetivo-parser-deterministico
+  (let [m (obj/parse-deterministico
+           "quero melhorar minha mira no Valorant sem trocar de sens, focando em flicks")]
+    (is (= :fixed-sens (:goal-mode m)) "'sem trocar sens' vence o jogo citado")
+    (is (= :valorant (:game m)))
+    (is (some #{"flick-tech"} (:focus m))))
+  (let [m (obj/parse-deterministico "quero subir no valorant, aceito testar outra sens")]
+    (is (= :sens-range (:goal-mode m)))
+    (is (= :valorant (:game m))))
+  (let [m (obj/parse-deterministico "melhorar tracking e cliques no cs2")]
+    (is (= :game-transfer (:goal-mode m)))
+    (is (= :cs2 (:game m)))
+    (is (= #{"control-tracking" "click-timing"} (set (:focus m)))))
+  ;; texto vazio nunca quebra
+  (is (some? (obj/parse-deterministico ""))))
+
+(deftest objetivo-valida-gate-do-llm
+  (is (nil? (obj/valida nil)))
+  (is (nil? (obj/valida {:goal-mode "modo-inventado"})) "modo fora do vocabulário reprova")
+  (let [v (obj/valida {"goal-mode" "game-transfer" "game" "valorant"
+                       "focus" ["flick-tech" "categoria-inventada"]
+                       "resumo" "foco em flicks pro Valorant"})]
+    (is (= :game-transfer (:goal-mode v)))
+    (is (= ["flick-tech"] (:focus v)) "categoria inventada é filtrada, não aceita")
+    (is (= :valorant (:game v))))
+  ;; jogo desconhecido degrada pra :geral em vez de reprovar tudo
+  (is (= :geral (:game (obj/valida {"goal-mode" "fixed-sens" "game" "fortnite"})))))
+
+(deftest objetivo-vira-patch-de-perfil
+  (let [patch (obj/objective->profile-patch
+               {:goal-mode :game-transfer :game :valorant :focus ["flick-tech"]})]
+    (is (= :game-transfer (:player/goal patch)))
+    (is (= ["flick-tech"] (:player/focus-categories patch))))
+  (is (clojure.string/includes?
+       (obj/resumo-humano {:goal-mode :fixed-sens :game :geral :focus ["flick-tech"]})
+       "Técnica de flick")))
 
 (deftest skills-sem-evidencia-ficam-fora
   (let [est (skills/estimate [] [] catalog)]
-    (is (nil? (get-in est [:reaction/simple :value])))
-    (is (zero? (get-in est [:reaction/simple :confidence])))))
+    (is (nil? (get-in est [:click-timing/reading :value])))
+    (is (zero? (get-in est [:click-timing/reading :confidence])))))
 
 (deftest reaction-simple-entra-com-screen-data
   (let [ev (skills/kinematic-evidence
             {:n_bouts 80
              :bouts_summary {:n_corrections {:median 1.0}}
              :reaction {:rt_median_ms 190.0 :n_matched 45}})]
-    (is (some? (get-in ev [:reaction/simple :value])))
-    (is (> (get-in ev [:reaction/simple :value]) 70.0))     ; 190ms = bom
-    (is (= 1.0 (get-in ev [:reaction/simple :confidence]))) ; 45/30 clampado
+    (is (some? (get-in ev [:click-timing/reading :value])))
+    (is (> (get-in ev [:click-timing/reading :value]) 70.0))     ; 190ms = bom
+    (is (= 1.0 (get-in ev [:click-timing/reading :confidence]))) ; 45/30 clampado
     ;; RT lento pontua baixo
     (let [lento (skills/kinematic-evidence
                  {:n_bouts 80 :bouts_summary {}
                   :reaction {:rt_median_ms 420.0 :n_matched 45}})]
-      (is (< (get-in lento [:reaction/simple :value]) 30.0)))))
+      (is (< (get-in lento [:click-timing/reading :value]) 30.0)))))
 
 (deftest choice-e-pursuit-viram-evidencia
   (let [ev (skills/kinematic-evidence
             {:n_bouts 80 :bouts_summary {}
              :reaction_choice {:wrong_direction_rate 0.05 :n 30}
              :pursuit {:realign_median_ms 160.0 :n_matched 30}})]
-    (is (> (get-in ev [:reaction/choice :value]) 80.0))
-    (is (> (get-in ev [:tracking/reactive :value]) 80.0))
+    (is (> (get-in ev [:reactive-tracking/reading :value]) 80.0))
+    (is (> (get-in ev [:reactive-tracking/control :value]) 80.0))
     (let [ruim (skills/kinematic-evidence
                 {:n_bouts 80 :bouts_summary {}
                  :reaction_choice {:wrong_direction_rate 0.45 :n 30}
                  :pursuit {:realign_median_ms 480.0 :n_matched 30}})]
-      (is (< (get-in ruim [:reaction/choice :value]) 25.0))
-      (is (< (get-in ruim [:tracking/reactive :value]) 25.0)))))
+      (is (< (get-in ruim [:reactive-tracking/reading :value]) 25.0))
+      (is (< (get-in ruim [:reactive-tracking/control :value]) 25.0)))))
+
+;; ---------------------------------------------------------------------------
+;; âncoras calibradas pelo lab (anchors.edn) — fallback e confiança (ADR 0003)
+;; ---------------------------------------------------------------------------
+
+(deftest anchors-fallback-pro-provisorio
+  ;; sem anchors.edn no classpath (estado atual do repo), o merge devolve o
+  ;; provisório intacto — coach offline nunca depende do lab
+  (is (= skills/provisional-anchors
+         (skills/merge-calibrated skills/provisional-anchors nil)))
+  (is (= skills/provisional-anchors
+         (skills/merge-calibrated skills/provisional-anchors {}))))
+
+(deftest anchors-calibrado-substitui-por-chave
+  (let [file-map {:anchors/source "population.db 2026-07-02 (3 vods)"
+                  :anchors {:sparc [[-4.0 5.0] [-1.0 95.0]]}
+                  :meta {:sparc {:n 240 :low-n false}}}
+        merged (skills/merge-calibrated skills/provisional-anchors file-map)]
+    (is (= [[-4.0 5.0] [-1.0 95.0]] (:sparc merged)) "chave calibrada entra")
+    (is (= (:overshoot skills/provisional-anchors) (:overshoot merged))
+        "chave que não passou no gate continua provisória")))
+
+(deftest anchor-confidence-marca-amostra-pobre
+  ;; provisória / sem meta: confiança cheia (o prior já assume incerteza)
+  (is (= 1.0 (skills/anchor-confidence nil :sparc)))
+  (is (= 1.0 (skills/anchor-confidence {} :sparc)))
+  ;; calibrada com n alto: cheia; n baixo: reduzida mas NUNCA zerada
+  (is (= 1.0 (skills/anchor-confidence {:sparc {:n 240}} :sparc)))
+  (is (= 0.5 (skills/anchor-confidence {:sparc {:n 20}} :sparc)))
+  (is (= 0.3 (skills/anchor-confidence {:sparc {:n 2}} :sparc))))
+
+(deftest endurance-usa-ancora-nomeada
+  ;; a tabela inline virou :endurance-eff (calibrável pelo lab — Tier 1)
+  (let [ev (skills/kinematic-evidence
+            {:n_bouts 80 :bouts_summary {}
+             :halves {:first {:efficiency 0.9} :second {:efficiency 0.9}}})]
+    (is (some? (get-in ev [:control-tracking/blending :value])))
+    (is (= 70.0 (double (get-in ev [:control-tracking/blending :value])))
+        "razão 1.0 cai no ponto [1.0 70.0] da âncora"))
+  (let [degradou (skills/kinematic-evidence
+                  {:n_bouts 80 :bouts_summary {}
+                   :halves {:first {:efficiency 0.95} :second {:efficiency 0.80}}})]
+    (is (< (get-in degradou [:control-tracking/blending :value]) 40.0))))
 
 (deftest evidencia-cinematica-mapeia-direcao-certa
   (let [bom  (skills/kinematic-evidence
@@ -128,7 +322,7 @@
                :bouts_summary {:n_corrections {:median 3.0} :overshoot_ratio {:median 1.25}
                                :time_peak_to_end_ms {:median 500.0}}
                :tremor {:band_power_ratio 0.55}})]
-    (is (> (get-in bom  [:acquisition/ballistic :value])
-           (get-in ruim [:acquisition/ballistic :value])))
-    (is (> (get-in bom  [:stability/tremor :value])
-           (get-in ruim [:stability/tremor :value])))))
+    (is (> (get-in bom  [:flick-tech/stability :value])
+           (get-in ruim [:flick-tech/stability :value])))
+    (is (> (get-in bom  [:control-tracking/fingertip :value])
+           (get-in ruim [:control-tracking/fingertip :value])))))

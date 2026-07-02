@@ -5,7 +5,14 @@
   filtro do perfil — regra dura do grill #9."
   (:require [cheshire.core :as json]
             [clojure.edn :as edn]
-            [clojure.java.io :as io]))
+            [clojure.java.io :as io]
+            [clojure.string :as str]))
+
+(defn- slurp-sem-bom
+  "Ferramenta Windows adora gravar BOM (0xFEFF) em UTF-8; o Jackson engasga.
+  Qualquer leitura de JSON editável por fora passa por aqui."
+  [f]
+  (str/replace (slurp f) "﻿" ""))
 
 (def default-profile
   {:player/goal :fixed-sens              ; :fixed-sens | :sens-range | :game-transfer
@@ -38,7 +45,7 @@
   (let [jf (json-path) ef (edn-path)]
     (cond
       (.exists jf)
-      (merge default-profile (coerce (json/parse-string (slurp jf) true)))
+      (merge default-profile (coerce (json/parse-string (slurp-sem-bom jf) true)))
 
       (.exists ef)
       (let [p (merge default-profile (coerce (edn/read-string (slurp ef))))]

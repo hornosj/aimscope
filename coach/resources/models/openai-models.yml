@@ -3,16 +3,76 @@
 # ============================================
 # Vive em resources/ -> no fat-jar fica em BOOT-INF/classes/models/
 # openai-models.yml, que o classpath resolve ANTES do YAML default do
-# embabel-agent-openai-autoconfigure. Logo ESTES slugs (OpenRouter) sao os
-# registrados; 'name' == o id que withLlm/default-llm referenciam (byName).
+# embabel-agent-openai-autoconfigure. Logo ESTES ids sao os registrados;
+# 'name' == o id que withLlm/default-llm referenciam (byName).
 #
-# REGRA DESTE ARQUIVO: SO modelos GRATUITOS (sufixo ':free') E que suportam
-# TOOL-CALLING (function calling). Fonte da capacidade: GET
-# https://openrouter.ai/api/v1/models filtrando supported_parameters contains
-# "tools" E id like "*:free". ATENCAO: tier free tem rate-limit agressivo; se o
-# default der 429/404, troque por outro deste arquivo (TODOS tem tools).
+# PROVIDER ATUAL: NVIDIA build (integrate.api.nvidia.com, env NVIDIA_APIKEY;
+# ver application.properties). Desde que a narrativa virou "deterministico e a
+# fonte, LLM so pole a prosa e passa por validacao", o pior caso e cair no
+# texto deterministico — entao a escolha do modelo e conforto, nao corretude.
+# Os ids OpenRouter ':free' ficam abaixo como RESERVA: troque o provider de
+# volta em application.properties (base-url + api-key) pra usa-los.
 models:
-  # --- DEFAULT: tools verificado + emite EDN limpo ---
+  # =========================================================================
+  # CADEIA DE FALLBACK por LATENCIA (insight_agent/model-chain) — NVIDIA build.
+  # Ordem = 1o token mais rapido primeiro (pedido do JP 2026-07-02: priorizar
+  # menor latencia). A narrativa tenta do topo pra baixo ate um produzir texto
+  # VALIDO; o LLM so pole a prosa, entao qualquer um serve e o pior caso e o
+  # deterministico. Latencias do 1o token medidas ao vivo (streaming, free).
+  # =========================================================================
+  # 1) MiniMax M3 — ~2s, o mais rapido. (GLM 5.1 do pedido NAO existe no NVIDIA.)
+  - name: "minimaxai/minimax-m3"
+    model_id: "minimaxai/minimax-m3"
+    display_name: "MiniMax M3 (NVIDIA build)"
+    max_tokens: 16384
+    temperature: 0.7
+    pricing_model: { usd_per1m_input_tokens: 0.0, usd_per1m_output_tokens: 0.0 }
+
+  # 2) Qwen3.5 397B — ~2.2s, maior MoE disponivel.
+  - name: "qwen/qwen3.5-397b-a17b"
+    model_id: "qwen/qwen3.5-397b-a17b"
+    display_name: "Qwen3.5 397B (NVIDIA build)"
+    max_tokens: 16384
+    temperature: 0.7
+    pricing_model: { usd_per1m_input_tokens: 0.0, usd_per1m_output_tokens: 0.0 }
+
+  # 3) Kimi K2.6 — ~3.2s.
+  - name: "moonshotai/kimi-k2.6"
+    model_id: "moonshotai/kimi-k2.6"
+    display_name: "Kimi K2.6 (NVIDIA build)"
+    max_tokens: 16384
+    temperature: 0.7
+    pricing_model: { usd_per1m_input_tokens: 0.0, usd_per1m_output_tokens: 0.0 }
+
+  # 4) DeepSeek V4 Flash — ~7.5s.
+  - name: "deepseek-ai/deepseek-v4-flash"
+    model_id: "deepseek-ai/deepseek-v4-flash"
+    display_name: "DeepSeek V4 Flash (NVIDIA build)"
+    max_tokens: 16384
+    temperature: 0.7
+    pricing_model: { usd_per1m_input_tokens: 0.0, usd_per1m_output_tokens: 0.0 }
+
+  # 5) DeepSeek V4 Pro — o mais poderoso, mas deu timeout (>90s) no free; fica
+  #    no fim justamente por latencia. A cadeia so chega aqui se todos acima
+  #    falharem, e um timeout aqui apenas cai no texto deterministico.
+  - name: "deepseek-ai/deepseek-v4-pro"
+    model_id: "deepseek-ai/deepseek-v4-pro"
+    display_name: "DeepSeek V4 Pro (NVIDIA build, 1M ctx)"
+    max_tokens: 16384
+    temperature: 0.7
+    pricing_model: { usd_per1m_input_tokens: 0.0, usd_per1m_output_tokens: 0.0 }
+
+  # --- RESERVA (OpenRouter free; exige trocar provider em application.properties) ---
+  - name: "nvidia/nemotron-3-ultra-550b-a55b:free"
+    model_id: "nvidia/nemotron-3-ultra-550b-a55b:free"
+    display_name: "Nemotron 3 Ultra 550B (OpenRouter free, tools, 1M ctx)"
+    max_tokens: 16384
+    temperature: 0.7
+    pricing_model:
+      usd_per1m_input_tokens: 0.0
+      usd_per1m_output_tokens: 0.0
+
+  # --- reserva: tools verificado + emite EDN limpo ---
   - name: "openai/gpt-oss-120b:free"
     model_id: "openai/gpt-oss-120b:free"
     display_name: "GPT-OSS 120B (OpenRouter free, tools)"
@@ -68,3 +128,19 @@ models:
     pricing_model:
       usd_per1m_input_tokens: 0.0
       usd_per1m_output_tokens: 0.0
+
+  # =========================================================================
+  # PAGO (opt-in, unica excecao a regra do free) — QA 2026-07-02.
+  # Desde que o deterministico virou a fonte e o LLM so pole prosa validada,
+  # o free basta; este bloco existe SO pra quem cansar do 429 do tier free.
+  # A tarefa e reescrita de ~500 tokens: custo por narrativa e ~US$0.0005.
+  # Ativar: env AIMSCOPE_LLM=deepseek/deepseek-chat-v3.2
+  # =========================================================================
+  - name: "deepseek/deepseek-chat-v3.2"
+    model_id: "deepseek/deepseek-chat-v3.2"
+    display_name: "DeepSeek V3.2 (OpenRouter PAGO, tools, estavel)"
+    max_tokens: 16384
+    temperature: 0.7
+    pricing_model:
+      usd_per1m_input_tokens: 0.25
+      usd_per1m_output_tokens: 0.4

@@ -1,0 +1,127 @@
+;; Catálogo Voltaic S4 (KovaaK's) — SEED de 2026-07-02 via "voltaic seed.xlsx"
+;; (VOLTAIC x KOVAAKS BENCHMARKS Season 4, sheet v1.2.9).
+;;
+;; Duas coisas neste arquivo, ortogonais:
+;;   :scenarios  = FAMÍLIAS (prior curado de skills, mesma ressalva do S5 — lore
+;;                 de coaching, não estudo causal). Regex :match casa o nome do
+;;                 CSV. Ordem de carga (catalog.clj): viscose, S4, S5, community.
+;;                 Pasu/onewall usam lookahead (?!.*s5) p/ NÃO roubar nomes S5.
+;;   :thresholds = RÉGUA por NOME EXATO do cenário (não por família: cada família
+;;                 tem 3 tiers com escalas de score diferentes). :scale :energy =
+;;                 pontos [energia-VT(100..1200) score]; residual normaliza ÷12.
+;;
+;; STRAFES (Angle/Arc/Pat/AirStrafe) entram só em :thresholds — são pontuados por
+;; MOVIMENTO, não por mira, então não viram família de skill (não poluem a
+;; estimativa de mecânica). A régua deles continua factual pra quem quiser medir.
+{:benchmark :voltaic-s4
+ :thresholds/source "voltaic seed.xlsx (VT x KovaaK's S4, v1.2.9)"
+ :scenarios
+ [;; ---------------- CLICKING ----------------
+  {:id :vt4/pasu       :match "(?i)pasu\\s*rasp(?!.*s5)" :category :clicking :subcategory :dynamic
+   :tiers #{:novice :intermediate :advanced}
+   :skills {:flick-tech/stability 0.4 :click-timing/precision 0.3 :flick-tech/micro 0.2 :click-timing/reading 0.1}
+   :amplitude :medium :target-kinematics :strafing :muscle {:wrist 0.6 :arm 0.4}}
+
+  {:id :vt4/bounceshot :match "(?i)vt\\s*bounceshot" :category :clicking :subcategory :dynamic
+   :tiers #{:novice :intermediate :advanced}
+   :skills {:click-timing/precision 0.35 :flick-tech/stability 0.3 :click-timing/reading 0.2 :reactive-tracking/reading 0.15}
+   :amplitude :medium :target-kinematics :erratic :muscle {:wrist 0.6 :arm 0.4}}
+
+  {:id :vt4/onewall    :match "(?i)1w\\d+ts\\s+rasp(?!.*s5)" :category :clicking :subcategory :static
+   :tiers #{:novice :intermediate :advanced}
+   :skills {:flick-tech/stability 0.35 :flick-tech/micro 0.35 :click-timing/precision 0.3}
+   :amplitude :small :target-kinematics :static :muscle {:wrist 0.8 :fingers 0.2}}
+
+  {:id :vt4/multiclick :match "(?i)multiclick" :category :clicking :subcategory :static
+   :tiers #{:novice :intermediate :advanced}
+   :skills {:click-timing/precision 0.4 :flick-tech/stability 0.3 :flick-tech/micro 0.3}
+   :amplitude :small :target-kinematics :static :muscle {:wrist 0.7 :fingers 0.3}}
+
+  ;; ---------------- TRACKING ----------------
+  {:id :vt4/smoothbot  :match "(?i)vt\\s*smoothbot" :category :tracking :subcategory :precise
+   :tiers #{:novice :intermediate :advanced}
+   :skills {:control-tracking/wrist 0.45 :control-tracking/arm 0.3 :control-tracking/fingertip 0.25}
+   :amplitude :medium :target-kinematics :constant-vel :muscle {:wrist 0.6 :arm 0.4}}
+
+  {:id :vt4/preciseorb :match "(?i)vt\\s*preciseorb" :category :tracking :subcategory :precise
+   :tiers #{:novice :intermediate :advanced}
+   :skills {:control-tracking/wrist 0.4 :control-tracking/fingertip 0.35 :flick-tech/micro 0.25}
+   :amplitude :small :target-kinematics :constant-vel :muscle {:wrist 0.8 :fingers 0.2}}
+
+  {:id :vt4/plaza      :match "(?i)vt\\s*plaza" :category :tracking :subcategory :reactive
+   :tiers #{:novice :intermediate :advanced}
+   :skills {:reactive-tracking/control 0.45 :reactive-tracking/reading 0.25 :control-tracking/wrist 0.3}
+   :amplitude :medium :target-kinematics :erratic :muscle {:wrist 0.6 :arm 0.4}}
+
+  {:id :vt4/air        :match "(?i)vt\\s*air\\s+(novice|intermediate|advanced)" :category :tracking :subcategory :reactive
+   :tiers #{:novice :intermediate :advanced}
+   :skills {:control-tracking/arm 0.4 :reactive-tracking/control 0.35 :control-tracking/blending 0.25}
+   :amplitude :large :target-kinematics :erratic :muscle {:arm 0.8 :wrist 0.2}}
+
+  ;; ---------------- SWITCHING ----------------
+  {:id :vt4/psalm-ts   :match "(?i)psalmts" :category :switching :subcategory :speed
+   :tiers #{:novice :intermediate :advanced}
+   :skills {:flick-tech/stability 0.35 :click-timing/precision 0.3 :click-timing/reading 0.2 :flick-tech/micro 0.15}
+   :amplitude :medium :target-kinematics :static :muscle {:wrist 0.7 :arm 0.3}}
+
+  {:id :vt4/sky-ts     :match "(?i)skyts" :category :switching :subcategory :speed
+   :tiers #{:novice :intermediate :advanced}
+   :skills {:flick-tech/stability 0.35 :reactive-tracking/reading 0.35 :click-timing/precision 0.3}
+   :amplitude :large :target-kinematics :static :muscle {:arm 0.6 :wrist 0.4}}
+
+  {:id :vt4/eva-ts     :match "(?i)evats" :category :switching :subcategory :evasive
+   :tiers #{:novice :intermediate :advanced}
+   :skills {:reactive-tracking/control 0.3 :reactive-tracking/reading 0.3 :flick-tech/stability 0.25 :click-timing/precision 0.15}
+   :amplitude :medium :target-kinematics :erratic :muscle {:wrist 0.5 :arm 0.5}}
+
+  {:id :vt4/bounce-ts  :match "(?i)bouncets" :category :switching :subcategory :evasive
+   :tiers #{:novice :intermediate :advanced}
+   :skills {:reactive-tracking/control 0.3 :reactive-tracking/reading 0.5 :click-timing/precision 0.2}
+   :amplitude :medium :target-kinematics :bouncing-predictable :muscle {:wrist 0.6 :arm 0.4}}]
+
+ ;; RÉGUA por nome exato (energia VT). Gerada da sheet S4; inclui strafes.
+ :thresholds
+ {"VT Pasu Rasp Novice" {:scale :energy :points [[100 550] [200 650] [300 750] [400 850]]}
+  "VT Bounceshot Novice" {:scale :energy :points [[100 500] [200 600] [300 700] [400 800]]}
+  "VT 1w6ts Rasp Novice" {:scale :energy :points [[100 650] [200 750] [300 850] [400 950]]}
+  "VT Multiclick 120 Novice" {:scale :energy :points [[100 1160] [200 1260] [300 1360] [400 1460]]}
+  "VT Smoothbot Novice" {:scale :energy :points [[100 2300] [200 2500] [300 3100] [400 3500]]}
+  "VT PreciseOrb Novice" {:scale :energy :points [[100 1300] [200 1600] [300 1900] [400 2200]]}
+  "VT Plaza Novice" {:scale :energy :points [[100 2150] [200 2450] [300 2850] [400 3050]]}
+  "VT Air Novice" {:scale :energy :points [[100 1900] [200 2200] [300 2500] [400 2800]]}
+  "VT psalmTS Novice" {:scale :energy :points [[100 620] [200 690] [300 760] [400 830]]}
+  "VT skyTS Novice" {:scale :energy :points [[100 780] [200 860] [300 950] [400 1040]]}
+  "VT evaTS Novice" {:scale :energy :points [[100 450] [200 510] [300 560] [400 620]]}
+  "VT bounceTS Novice" {:scale :energy :points [[100 490] [200 550] [300 610] [400 680]]}
+  "VT Pasu Rasp Intermediate" {:scale :energy :points [[500 750] [600 850] [700 950] [800 1050]]}
+  "VT Bounceshot Intermediate" {:scale :energy :points [[500 600] [600 700] [700 800] [800 900]]}
+  "VT 1w5ts Rasp Intermediate" {:scale :energy :points [[500 1000] [600 1100] [700 1200] [800 1300]]}
+  "VT Multiclick 120 Intermediate" {:scale :energy :points [[500 1360] [600 1460] [700 1560] [800 1660]]}
+  "VT AngleStrafe Intermediate" {:scale :energy :points [[500 740] [600 830] [700 920] [800 1000]]}
+  "VT ArcStrafe Intermediate" {:scale :energy :points [[500 660] [600 750] [700 850] [800 940]]}
+  "VT Smoothbot Intermediate" {:scale :energy :points [[500 3050] [600 3450] [700 3850] [800 4250]]}
+  "VT PreciseOrb Intermediate" {:scale :energy :points [[500 1650] [600 2050] [700 2450] [800 2850]]}
+  "VT Plaza Intermediate" {:scale :energy :points [[500 2680] [600 2980] [700 3280] [800 3530]]}
+  "VT Air Intermediate" {:scale :energy :points [[500 2450] [600 2700] [700 2950] [800 3200]]}
+  "VT PatStrafe Intermediate" {:scale :energy :points [[500 2260] [600 2620] [700 2800] [800 3050]]}
+  "VT AirStrafe Intermediate" {:scale :energy :points [[500 2800] [600 3000] [700 3200] [800 3400]]}
+  "VT psalmTS Intermediate" {:scale :energy :points [[500 810] [600 880] [700 950] [800 1020]]}
+  "VT skyTS Intermediate" {:scale :energy :points [[500 1030] [600 1130] [700 1220] [800 1300]]}
+  "VT evaTS Intermediate" {:scale :energy :points [[500 550] [600 600] [700 650] [800 700]]}
+  "VT bounceTS Intermediate" {:scale :energy :points [[500 630] [600 670] [700 710] [800 760]]}
+  "VT Pasu Rasp Advanced" {:scale :energy :points [[900 940] [1000 1040] [1100 1120] [1200 1270]]}
+  "VT Bounceshot Advanced" {:scale :energy :points [[900 800] [1000 900] [1100 1000] [1200 1150]]}
+  "VT 1w3ts Rasp Advanced" {:scale :energy :points [[900 1280] [1000 1380] [1100 1460] [1200 1580]]}
+  "VT Multiclick 180 Advanced" {:scale :energy :points [[900 1630] [1000 1770] [1100 1890] [1200 2000]]}
+  "VT AngleStrafe Advanced" {:scale :energy :points [[900 880] [1000 1020] [1100 1150] [1200 1230]]}
+  "VT ArcStrafe Advanced" {:scale :energy :points [[900 940] [1000 1080] [1100 1150] [1200 1230]]}
+  "VT Smoothbot Advanced" {:scale :energy :points [[900 3300] [1000 3600] [1100 3950] [1200 4300]]}
+  "VT PreciseOrb Advanced" {:scale :energy :points [[900 2500] [1000 2850] [1100 3250] [1200 3650]]}
+  "VT Plaza Advanced" {:scale :energy :points [[900 3275] [1000 3475] [1100 3600] [1200 3800]]}
+  "VT Air Advanced" {:scale :energy :points [[900 3000] [1000 3250] [1100 3500] [1200 3750]]}
+  "VT PatStrafe Advanced" {:scale :energy :points [[900 3050] [1000 3240] [1100 3400] [1200 3500]]}
+  "VT AirStrafe Advanced" {:scale :energy :points [[900 3400] [1000 3600] [1100 3700] [1200 3825]]}
+  "VT psalmTS Advanced" {:scale :energy :points [[900 1080] [1000 1160] [1100 1200] [1200 1330]]}
+  "VT skyTS Advanced" {:scale :energy :points [[900 1300] [1000 1430] [1100 1500] [1200 1600]]}
+  "VT evaTS Advanced" {:scale :energy :points [[900 680] [1000 740] [1100 780] [1200 830]]}
+  "VT bounceTS Advanced" {:scale :energy :points [[900 820] [1000 920] [1100 970] [1200 1050]]}}}

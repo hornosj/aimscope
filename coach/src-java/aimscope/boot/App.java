@@ -27,12 +27,17 @@ public class App {
   CommandLineRunner boot(AgentPlatform platform, ConfigurableApplicationContext ctx) {
     return args -> {
       int code = 0;
+      // dispatch por argumento: "objective" interpreta o objetivo em linguagem
+      // natural; default roda a narrativa. Mesmo processo batch, dois agentes.
+      boolean objective = args.length > 0 && "objective".equals(args[0]);
+      String ns = objective ? "aimscope.coach.objective-agent" : "aimscope.coach.insight-agent";
+      String fn = objective ? "interpret!" : "narrate!";
       try {
         IFn require = Clojure.var("clojure.core", "require");
-        require.invoke(Clojure.read("aimscope.coach.insight-agent"));
-        Clojure.var("aimscope.coach.insight-agent", "narrate!").invoke(platform);
+        require.invoke(Clojure.read(ns));
+        Clojure.var(ns, fn).invoke(platform);
       } catch (Throwable t) {
-        System.err.println("[boot] agente de narrativa falhou: " + t);
+        System.err.println("[boot] agente " + ns + " falhou: " + t);
         t.printStackTrace();
         code = 1;
       }

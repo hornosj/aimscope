@@ -1,13 +1,20 @@
 (ns aimscope.coach.skills
-  "Estimador das 11 skills latentes (CONTEXT.md) a partir de duas correntes de
-  evidência: cinemática (metrics.json do sensor) e scores (CSV × catálogo).
+  "Estimador das 14 skills latentes (taxonomia Viscose S2, CONTEXT.md) a partir
+  de duas correntes de evidência: cinemática (metrics.json do sensor) e scores
+  (CSV × catálogo). Skills sem canal cinemático (flick-tech/speed,
+  reactive-tracking/speed, click-timing/stability) são score-driven até o
+  sensor ganhar o canal correspondente.
 
-  Escala: 0–100, 50 = neutro. Âncoras absolutas PROVISÓRIAS e documentadas —
-  recalibradas pelo loop previsto×realizado quando houver histórico.
-  Fusão temporal: EWMA (alpha maior p/ evidência mais confiável).
-  Skills sem evidência (reaction/* antes do DXGI) ficam com :confidence 0 e
-  FORA do diagnóstico — nunca inventamos número."
-  (:require [aimscope.coach.catalog :as cat]))
+  Escala: 0–100, 50 = neutro. Âncoras: carrega anchors.edn CALIBRADO pelo lab
+  (docs/design-vod-lab.md §9, ADR 0003) quando existir no classpath; fallback
+  pro prior provisório hardcoded — o coach offline nunca depende do lab.
+  Âncora calibrada com n baixo fica marcada no :meta e pesa menos na evidência
+  (nunca silenciada). Fusão temporal: EWMA (alpha maior p/ evidência mais
+  confiável). Skills sem evidência (reaction/* antes do DXGI) ficam com
+  :confidence 0 e FORA do diagnóstico — nunca inventamos número."
+  (:require [clojure.edn :as edn]
+            [clojure.java.io :as io]
+            [aimscope.coach.catalog :as cat]))
 
 ;; ---------------------------------------------------------------------------
 ;; âncoras: métrica cinemática -> score 0-100 (lerp em pontos de referência)
@@ -25,9 +32,10 @@
                             (+ s1 (* (- s2 s1) (/ (- v x1) (- x2 x1))))))
                         (partition 2 1 table))))))
 
-(def ^:private anchors
+(def provisional-anchors
   ;; [métrica -> tabela] — pontos de: literatura (tremor), pilotos sintéticos e
-  ;; bom senso de coaching. PROVISÓRIO por decisão (design-coach.md §2).
+  ;; bom senso de coaching. PROVISÓRIO por decisão (design-coach.md §2);
+  ;; substituído chave a chave pelo anchors.edn do lab quando existir.
   {:corrections    [[0.0 90.0] [1.0 70.0] [2.0 45.0] [3.0 25.0] [5.0 10.0]]
    :overshoot      [[1.0 90.0] [1.05 70.0] [1.10 50.0] [1.20 25.0] [1.4 10.0]]
    :efficiency     [[0.6 10.0] [0.8 40.0] [0.9 65.0] [0.97 90.0] [1.0 95.0]]
@@ -40,7 +48,63 @@
    ;; % de spawns com 1º movimento na direção ERRADA (choice, v0.4)
    :wrong-dir      [[0.02 95.0] [0.08 80.0] [0.15 60.0] [0.30 35.0] [0.50 10.0]]
    ;; lag de realinhamento pós-inversão do alvo (ms) — 'perda de movimento'
-   :realign-ms     [[120.0 95.0] [180.0 78.0] [250.0 60.0] [350.0 38.0] [500.0 15.0]]})
+   :realign-ms     [[120.0 95.0] [180.0 78.0] [250.0 60.0] [350.0 38.0] [500.0 15.0]]
+   ;; endurance: eficiência 2ª metade / 1ª metade (razão adimensional)
+   :endurance-eff  [[0.85 15.0] [0.95 45.0] [1.0 70.0] [1.05 90.0]]})
+
+(defn read-anchors-file
+  "anchors.edn emitido pelo lab (coach/catalog no classpath, como os demais
+  EDN). nil se ausente ou corrompido — o coach nunca quebra por causa do lab."
+  []
+  (when-let [res (io/resource "anchors.edn")]
+    (try (edn/read-string (slurp res))
+         (catch Exception _ nil))))
+
+(defn merge-calibrated
+  "Fallback por CHAVE: métrica calibrada pelo lab substitui a provisória;
+  o resto continua no prior (o lab só emite o que passou no gate — ADR 0003)."
+  [provisional file-map]
+  (merge provisional (:anchors file-map)))
+
+(def ^:private calibrated (delay (read-anchors-file)))
+(def ^:private anchors* (delay (merge-calibrated provisional-anchors @calibrated)))
+
+(defn- anchors [k] (get @anchors* k))
+
+(defn anchor-confidence
+  "Peso de confiança da âncora k dado o :meta do anchors.edn: calibrada com n
+  baixo pesa menos (design §6 — marcada, não silenciada). Provisória ou sem
+  meta = 1.0 (o prior já assume a própria incerteza)."
+  [meta k]
+  (if-let [n (get-in meta [k :n])]
+    (-> (/ n 40.0) (min 1.0) (max 0.3) double)
+    1.0))
+
+(def ^:private skill->anchor-keys
+  ;; quais âncoras sustentam a evidência cinemática de cada skill — usado pra
+  ;; propagar a confiança da âncora calibrada pra confiança da evidência.
+  ;; Skills sem entrada aqui são score-driven (sem evidência cinemática ainda).
+  {:flick-tech/stability       [:overshoot]
+   :flick-tech/post-flick      [:corrections :homing-ms]
+   :flick-tech/micro           [:corrections :homing-ms]
+   :control-tracking/wrist     [:sparc]
+   :control-tracking/arm       [:sparc]
+   :control-tracking/fingertip [:tremor-ratio :sparc]
+   :control-tracking/blending  [:endurance-eff]
+   :click-timing/precision     [:efficiency]
+   :click-timing/reading       [:reaction-ms]
+   :reactive-tracking/reading  [:wrong-dir]
+   :reactive-tracking/control  [:realign-ms]})
+
+(defn- apply-anchor-confidence [ev meta]
+  (into {}
+        (map (fn [[skill e]]
+               (let [ks (skill->anchor-keys skill)
+                     c  (if (seq ks)
+                          (apply min (map #(anchor-confidence meta %) ks))
+                          1.0)]
+                 [skill (update e :confidence * c)])))
+        ev))
 
 (defn- m [metrics & path] (get-in metrics path))
 
@@ -58,56 +122,64 @@
         conf    (min 1.0 (/ n-bouts 60.0))          ; 60+ bouts = confiança cheia
         avg     (fn [xs] (let [xs (remove nil? xs)]
                            (when (seq xs) (/ (reduce + xs) (count xs)))))
-        ev      {:acquisition/ballistic
+        ev      {;; ---- Flick Tech: o arremesso e sua correção -------------
+                 :flick-tech/stability
+                 (lerp-scale (anchors :overshoot) (bs :overshoot_ratio))
+                 :flick-tech/post-flick
                  (avg [(lerp-scale (anchors :corrections) (bs :n_corrections))
-                       (lerp-scale (anchors :overshoot)   (bs :overshoot_ratio))])
-                 :precision/micro-adjust
+                       (lerp-scale (anchors :homing-ms) (bs :time_peak_to_end_ms))])
+                 :flick-tech/micro
                  (avg [(lerp-scale (anchors :homing-ms) (bs :time_peak_to_end_ms))
                        (lerp-scale (anchors :corrections)
                                    (or (band-summary metrics "micro" "n_corrections")
                                        (band-summary metrics "small" "n_corrections")))])
-                 :tracking/smooth-wrist
+                 ;; ---- Control Tracking: suavidade por grupo muscular -----
+                 :control-tracking/wrist
                  (lerp-scale (anchors :sparc)
                              (or (band-summary metrics "small" "sparc")
                                  (band-summary metrics "micro" "sparc")))
-                 :tracking/smooth-arm
+                 :control-tracking/arm
                  (lerp-scale (anchors :sparc)
                              (or (band-summary metrics "large" "sparc")
                                  (band-summary metrics "medium" "sparc")))
-                 :stability/tremor
-                 (lerp-scale (anchors :tremor-ratio) (m metrics :tremor :band_power_ratio))
-                 :orientation/spatial
-                 (avg [(lerp-scale (anchors :efficiency)
-                                   (band-summary metrics "large" "efficiency"))
-                       (lerp-scale (anchors :overshoot)
-                                   (band-summary metrics "large" "overshoot_ratio"))])
-                 :consistency/endurance
+                 :control-tracking/fingertip
+                 (avg [(lerp-scale (anchors :tremor-ratio) (m metrics :tremor :band_power_ratio))
+                       (lerp-scale (anchors :sparc)
+                                   (or (band-summary metrics "micro" "sparc")
+                                       (band-summary metrics "small" "sparc")))])
+                 :control-tracking/blending
+                 ;; sustentar o controle: degradação 1ª->2ª metade da sessão
                  (when-let [h (m metrics :halves)]
-                   ;; degradação 1ª->2ª metade: eficiência caindo = endurance baixa
                    (let [e1 (m h :first :efficiency) e2 (m h :second :efficiency)]
                      (when (and e1 e2 (pos? e1))
-                       (lerp-scale [[0.85 15.0] [0.95 45.0] [1.0 70.0] [1.05 90.0]]
-                                   (/ e2 e1)))))}]
-    (cond-> (into {} (keep (fn [[k v]] (when v [k {:value (double v) :confidence conf}])) ev))
-      ;; reaction/simple (v0.3, screen.parquet) tem confiança própria: nº de
+                       (lerp-scale (anchors :endurance-eff) (/ e2 e1)))))
+                 ;; ---- Click Timing: alinhamento fino ----------------------
+                 :click-timing/precision
+                 (lerp-scale (anchors :efficiency)
+                             (or (band-summary metrics "small" "efficiency")
+                                 (band-summary metrics "large" "efficiency")
+                                 (bs :efficiency)))}]
+    (-> (cond-> (into {} (keep (fn [[k v]] (when v [k {:value (double v) :confidence conf}])) ev))
+      ;; leitura de clique (v0.3, screen.parquet) tem confiança própria: nº de
       ;; pares evento-visual->onset casados, não nº de bouts.
       (m metrics :reaction :rt_median_ms)
-      (assoc :reaction/simple
+      (assoc :click-timing/reading
              {:value      (double (lerp-scale (anchors :reaction-ms)
                                               (m metrics :reaction :rt_median_ms)))
               :confidence (min 1.0 (/ (or (m metrics :reaction :n_matched) 0) 30.0))})
 
       (m metrics :reaction_choice :wrong_direction_rate)
-      (assoc :reaction/choice
+      (assoc :reactive-tracking/reading
              {:value      (double (lerp-scale (anchors :wrong-dir)
                                               (m metrics :reaction_choice :wrong_direction_rate)))
               :confidence (min 1.0 (/ (or (m metrics :reaction_choice :n) 0) 25.0))})
 
       (m metrics :pursuit :realign_median_ms)
-      (assoc :tracking/reactive
+      (assoc :reactive-tracking/control
              {:value      (double (lerp-scale (anchors :realign-ms)
                                               (m metrics :pursuit :realign_median_ms)))
-              :confidence (min 1.0 (/ (or (m metrics :pursuit :n_matched) 0) 25.0))}))))
+              :confidence (min 1.0 (/ (or (m metrics :pursuit :n_matched) 0) 25.0))}))
+        (apply-anchor-confidence (:meta @calibrated)))))
 
 ;; ---------------------------------------------------------------------------
 ;; evidência de score: z do próprio histórico distribui p/ skills via catálogo

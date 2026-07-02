@@ -5,45 +5,45 @@
  :thresholds/source :none
  :scenarios
  [{:id :com/smoothsphere :match "(?i)smoothsphere" :category :tracking :subcategory :smooth
-   :skills {:tracking/smooth-arm 0.60 :consistency/endurance 0.25 :stability/tremor 0.15}
+   :skills {:control-tracking/arm 0.6 :control-tracking/blending 0.25 :control-tracking/fingertip 0.15}
    :amplitude :large :target-kinematics :constant-vel :muscle {:arm 0.9 :wrist 0.1}
-   :drill/for [:tracking/smooth-arm]}
+   :drill/for [:control-tracking/arm]}
 
   {:id :com/whisphere :match "(?i)whisphere" :category :tracking :subcategory :smooth
-   :skills {:tracking/smooth-arm 0.55 :tracking/smooth-wrist 0.25 :consistency/endurance 0.20}
+   :skills {:control-tracking/arm 0.55 :control-tracking/wrist 0.25 :control-tracking/blending 0.2}
    :amplitude :large :target-kinematics :constant-vel :muscle {:arm 0.8 :wrist 0.2}
-   :drill/for [:tracking/smooth-arm]}
+   :drill/for [:control-tracking/arm]}
 
   {:id :com/smoothbot :match "(?i)smoothbot" :category :tracking :subcategory :smooth
-   :skills {:tracking/smooth-arm 0.50 :tracking/smooth-wrist 0.30 :stability/tremor 0.20}
+   :skills {:control-tracking/arm 0.5 :control-tracking/wrist 0.3 :control-tracking/fingertip 0.2}
    :amplitude :medium :target-kinematics :constant-vel :muscle {:arm 0.6 :wrist 0.4}
-   :drill/for [:tracking/smooth-arm :tracking/smooth-wrist]}
+   :drill/for [:control-tracking/arm :control-tracking/wrist]}
 
   {:id :com/bounce-180 :match "(?i)bounce.?180" :category :switching :subcategory :stability
-   :skills {:tracking/smooth-arm 0.30 :click/timing 0.30 :orientation/spatial 0.25 :precision/micro-adjust 0.15}
+   :skills {:control-tracking/arm 0.3 :click-timing/precision 0.3 :reactive-tracking/reading 0.25 :flick-tech/micro 0.15}
    :amplitude :large :target-kinematics :bouncing-predictable :muscle {:arm 0.7 :wrist 0.3}}
 
   {:id :com/microshot-precision :match "(?i)microshot.*precision" :category :clicking :subcategory :static
-   :skills {:precision/micro-adjust 0.55 :click/timing 0.30 :stability/tremor 0.15}
+   :skills {:flick-tech/micro 0.55 :click-timing/precision 0.3 :control-tracking/fingertip 0.15}
    :amplitude :micro :target-kinematics :static :muscle {:wrist 0.6 :fingers 0.4}
-   :drill/for [:precision/micro-adjust]}
+   :drill/for [:flick-tech/micro]}
 
   {:id :com/microshot-speed :match "(?i)microshot.*speed" :category :clicking :subcategory :static
-   :skills {:click/timing 0.45 :precision/micro-adjust 0.35 :reaction/simple 0.20}
+   :skills {:click-timing/precision 0.45 :flick-tech/micro 0.35 :click-timing/reading 0.2}
    :amplitude :micro :target-kinematics :static :muscle {:wrist 0.6 :fingers 0.4}
-   :drill/for [:click/timing]}
+   :drill/for [:click-timing/precision]}
 
   {:id :com/onewall-6ts-small :match "(?i)1wall.?6.?targets.?small|1w6ts.?small" :category :clicking :subcategory :static
-   :skills {:acquisition/ballistic 0.40 :precision/micro-adjust 0.35 :click/timing 0.25}
+   :skills {:flick-tech/stability 0.4 :flick-tech/micro 0.35 :click-timing/precision 0.25}
    :amplitude :small :target-kinematics :static :muscle {:wrist 0.8 :fingers 0.2}
-   :drill/for [:acquisition/ballistic :precision/micro-adjust]}
+   :drill/for [:flick-tech/stability :flick-tech/micro]}
 
   {:id :com/patts-easy :match "(?i)pattargetswitch|pat\\s*ts" :category :switching :subcategory :speed
-   :skills {:acquisition/ballistic 0.40 :orientation/spatial 0.30 :click/timing 0.30}
+   :skills {:flick-tech/stability 0.4 :reactive-tracking/reading 0.3 :click-timing/precision 0.3}
    :amplitude :medium :target-kinematics :static :muscle {:wrist 0.5 :arm 0.5}
-   :drill/for [:orientation/spatial]}
+   :drill/for [:reactive-tracking/reading]}
 
   {:id :com/reflex-flick :match "(?i)reflex.?flick" :category :clicking :subcategory :dynamic
-   :skills {:reaction/simple 0.50 :acquisition/ballistic 0.30 :click/timing 0.20}
+   :skills {:click-timing/reading 0.5 :flick-tech/stability 0.3 :click-timing/precision 0.2}
    :amplitude :medium :target-kinematics :static :muscle {:wrist 0.7 :arm 0.3}
-   :drill/for [:reaction/simple]}]}
+   :drill/for [:click-timing/reading]}]}
