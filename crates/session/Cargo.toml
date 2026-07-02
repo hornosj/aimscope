@@ -1,0 +1,11 @@
+[package]
+name = "session"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chrono = "0.4"
+dirs = "5"

@@ -1,0 +1,21 @@
+{:paths ["src" "catalog"]
+
+ :deps {org.clojure/clojure {:mvn/version "1.12.0"}
+        ;; store of record (ADR 0001): SQLite append-only
+        com.github.seancorfield/next.jdbc {:mvn/version "1.3.939"}
+        org.xerial/sqlite-jdbc {:mvn/version "3.46.1.0"}
+        ;; queries datalog em memoria (mesma API do Datomic — ADR 0001)
+        datascript/datascript {:mvn/version "1.7.3"}
+        ;; JSON (metrics.json do sensor, diagnosis/plan.json p/ a UI, API kovaaks)
+        cheshire/cheshire {:mvn/version "5.13.0"}
+        ;; HTTP (cliente kovaaks.com) — mesmo stack do beautiful-linkedin
+        hato/hato {:mvn/version "1.0.0"}
+        org.clojure/tools.cli {:mvn/version "1.1.230"}}
+
+ :aliases
+ {;; clojure -M:test  -> suite completa
+  :test {:extra-paths ["test"]
+         :main-opts ["-m" "aimscope.coach.test-runner"]}
+
+  ;; clojure -M:run <cmd>  -> CLI do coach (ingest | diagnose | plan | all | enrich)
+  :run {:main-opts ["-m" "aimscope.coach.main"]}}}

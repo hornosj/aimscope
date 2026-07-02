@@ -1,0 +1,70 @@
+;; Catálogo Viscose S2 — SEED de 2026-07-01 via API oficial kovaaks.com
+;; (scenario/popular?scenarioNameSearch=viscose, 349 cenários; famílias × tiers
+;; Entry/Easier/base/Medium/Hard/Advanced/Expert identificadas).
+;;
+;; :skills = prior curado (mesma ressalva do VT). :rank-thresholds pendentes
+;; (sheet oficial). Cada entrada casa a FAMÍLIA em todos os tiers via regex.
+{:benchmark :viscose-s2
+ :thresholds/source :pending
+ :scenarios
+ [;; ---------------- TRACKING ----------------
+  {:id :vs/smoothsphere :match "(?i)smoothsphere.*viscose" :category :tracking :subcategory :smooth
+   :skills {:tracking/smooth-arm 0.55 :consistency/endurance 0.25 :stability/tremor 0.20}
+   :amplitude :large :target-kinematics :constant-vel :muscle {:arm 0.9 :wrist 0.1}
+   :drill/for [:tracking/smooth-arm]}
+
+  {:id :vs/whisphere :match "(?i)whisphere.*viscose" :category :tracking :subcategory :smooth
+   :skills {:tracking/smooth-arm 0.45 :tracking/smooth-wrist 0.30 :consistency/endurance 0.25}
+   :amplitude :large :target-kinematics :constant-vel :muscle {:arm 0.7 :wrist 0.3}
+   :drill/for [:tracking/smooth-arm :tracking/smooth-wrist]}
+
+  {:id :vs/controlsphere :match "(?i)controlsphere.*viscose" :category :tracking :subcategory :control
+   :skills {:tracking/smooth-arm 0.40 :orientation/spatial 0.30 :tracking/reactive 0.30}
+   :amplitude :large :target-kinematics :erratic :muscle {:arm 0.8 :wrist 0.2}}
+
+  {:id :vs/raw-control :match "(?i)rawcontrol.*viscose|raw.?control.*viscose" :category :tracking :subcategory :control
+   :skills {:tracking/reactive 0.40 :tracking/smooth-arm 0.35 :consistency/endurance 0.25}
+   :amplitude :large :target-kinematics :erratic :muscle {:arm 0.8 :wrist 0.2}
+   :drill/for [:tracking/reactive]}
+
+  {:id :vs/narrow-strafes :match "(?i)narrow.?strafes.*viscose" :category :tracking :subcategory :reactive
+   :skills {:tracking/reactive 0.50 :reaction/choice 0.25 :tracking/smooth-wrist 0.25}
+   :amplitude :small :target-kinematics :strafing :muscle {:wrist 0.8 :fingers 0.2}
+   :drill/for [:tracking/reactive]}
+
+  {:id :vs/plaza :match "(?i)plaza.*viscose" :category :tracking :subcategory :precise
+   :skills {:tracking/smooth-wrist 0.40 :stability/tremor 0.30 :precision/micro-adjust 0.30}
+   :amplitude :small :target-kinematics :strafing :muscle {:wrist 0.8 :fingers 0.2}
+   :drill/for [:stability/tremor]}
+
+  {:id :vs/air-angelic :match "(?i)air.?angelic.*viscose|vt air viscose" :category :tracking :subcategory :smooth
+   :skills {:tracking/smooth-arm 0.45 :orientation/spatial 0.30 :consistency/endurance 0.25}
+   :amplitude :large :target-kinematics :constant-vel :muscle {:arm 0.85 :wrist 0.15}}
+
+  ;; ---------------- CLICKING ----------------
+  {:id :vs/floating-heads :match "(?i)floating.?heads.*viscose" :category :clicking :subcategory :linear
+   :skills {:acquisition/ballistic 0.40 :click/timing 0.30 :reaction/simple 0.15 :precision/micro-adjust 0.15}
+   :amplitude :medium :target-kinematics :strafing :muscle {:wrist 0.6 :arm 0.4}}
+
+  {:id :vs/bounceshot :match "(?i)bounceshot.*viscose" :category :clicking :subcategory :dynamic
+   :skills {:click/timing 0.35 :acquisition/ballistic 0.30 :reaction/simple 0.20 :orientation/spatial 0.15}
+   :amplitude :medium :target-kinematics :erratic :muscle {:wrist 0.6 :arm 0.4}
+   :drill/for [:click/timing]}
+
+  {:id :vs/psalm-click :match "(?i)psalmts.*viscose" :category :clicking :subcategory :dynamic
+   :skills {:acquisition/ballistic 0.40 :click/timing 0.35 :precision/micro-adjust 0.25}
+   :amplitude :medium :target-kinematics :strafing :muscle {:wrist 0.7 :arm 0.3}}
+
+  {:id :vs/pasu :match "(?i)pasu.*viscose" :category :clicking :subcategory :dynamic
+   :skills {:acquisition/ballistic 0.40 :click/timing 0.30 :precision/micro-adjust 0.20 :reaction/simple 0.10}
+   :amplitude :medium :target-kinematics :strafing :muscle {:wrist 0.6 :arm 0.4}}
+
+  ;; ---------------- SWITCHING ----------------
+  {:id :vs/vox-ts :match "(?i)voxts.*viscose" :category :switching :subcategory :speed
+   :skills {:acquisition/ballistic 0.35 :click/timing 0.30 :orientation/spatial 0.20 :precision/micro-adjust 0.15}
+   :amplitude :medium :target-kinematics :static :muscle {:wrist 0.6 :arm 0.4}}
+
+  {:id :vs/sky-ts :match "(?i)skyts.*viscose" :category :switching :subcategory :evasive
+   :skills {:orientation/spatial 0.35 :acquisition/ballistic 0.30 :tracking/reactive 0.20 :click/timing 0.15}
+   :amplitude :large :target-kinematics :erratic :muscle {:arm 0.6 :wrist 0.4}
+   :drill/for [:orientation/spatial]}]}

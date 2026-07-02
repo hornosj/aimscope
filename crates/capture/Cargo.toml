@@ -1,0 +1,36 @@
+[package]
+name = "capture"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+session = { path = "../session" }
+arrow-array = "55"
+arrow-schema = "55"
+parquet = { version = "55", features = ["arrow"] }
+
+[dependencies.windows]
+version = "0.58"
+features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+]
+
+[dependencies.windows-sys]
+version = "0.59"
+features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_Graphics_Gdi",
+    "Win32_UI_Input",
+    "Win32_Devices_HumanInterfaceDevice",
+    "Win32_System_Performance",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Threading",
+]

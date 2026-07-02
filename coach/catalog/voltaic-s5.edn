@@ -1,0 +1,105 @@
+;; Catálogo Voltaic S5 (KovaaK's) — CURADORIA v0.
+;;
+;; Fontes: blog.voltaic.gg (anúncio S5), estrutura de categorias/subcategorias
+;; oficial. :match é regex case-insensitive aplicada ao nome do cenário no CSV
+;; (os nomes in-game têm prefixos/sufixos de temporada, ex. "VT Pasu Rasp S5").
+;;
+;; HONESTIDADE: :skills são PRIOR CURADO (lore de coaching, não estudo causal) —
+;; o coach recalibra por usuário com o loop previsto×realizado. :rank-thresholds
+;; ficam nil até seed das sheets oficiais (:thresholds/source :pending).
+;; Energia sem threshold ⇒ coach usa z-score do próprio histórico.
+{:benchmark :voltaic-s5
+ :thresholds/source :pending
+ :scenarios
+ [;; ---------------- CLICKING ----------------
+  {:id :vt/pasu           :match "(?i)pasu"           :category :clicking  :subcategory :dynamic
+   :tiers #{:novice :intermediate :advanced}
+   :skills {:acquisition/ballistic 0.40 :click/timing 0.30 :precision/micro-adjust 0.20 :reaction/simple 0.10}
+   :amplitude :medium :target-kinematics :strafing :muscle {:wrist 0.6 :arm 0.4}}
+
+  {:id :vt/popcorn        :match "(?i)popcorn"        :category :clicking  :subcategory :dynamic
+   :tiers #{:novice :intermediate :advanced}
+   :skills {:acquisition/ballistic 0.35 :click/timing 0.35 :reaction/simple 0.20 :precision/micro-adjust 0.10}
+   :amplitude :medium :target-kinematics :erratic :muscle {:wrist 0.7 :arm 0.3}}
+
+  {:id :vt/onewall-ts     :match "(?i)1w\\d+ts|1wall"  :category :clicking  :subcategory :static
+   :tiers #{:novice :intermediate :advanced}
+   :skills {:acquisition/ballistic 0.35 :precision/micro-adjust 0.35 :click/timing 0.30}
+   :amplitude :small :target-kinematics :static :muscle {:wrist 0.8 :fingers 0.2}}
+
+  {:id :vt/ww-t           :match "(?i)ww\\d+t"         :category :clicking  :subcategory :static
+   :tiers #{:novice :intermediate :advanced}
+   :skills {:precision/micro-adjust 0.40 :acquisition/ballistic 0.30 :click/timing 0.30}
+   :amplitude :small :target-kinematics :static :muscle {:wrist 0.8 :fingers 0.2}}
+
+  {:id :vt/frogtagon      :match "(?i)frogtagon"      :category :clicking  :subcategory :linear
+   :tiers #{:intermediate :advanced}
+   :skills {:acquisition/ballistic 0.35 :click/timing 0.30 :orientation/spatial 0.20 :precision/micro-adjust 0.15}
+   :amplitude :medium :target-kinematics :strafing :muscle {:wrist 0.5 :arm 0.5}}
+
+  {:id :vt/floating-heads :match "(?i)floating\\s*heads" :category :clicking :subcategory :linear
+   :tiers #{:intermediate :advanced}
+   :skills {:acquisition/ballistic 0.40 :click/timing 0.30 :reaction/simple 0.15 :precision/micro-adjust 0.15}
+   :amplitude :medium :target-kinematics :strafing :muscle {:wrist 0.6 :arm 0.4}}
+
+  ;; ---------------- TRACKING ----------------
+  {:id :vt/pgt            :match "(?i)pgt|plaza.?ground" :category :tracking :subcategory :precise
+   :tiers #{:novice :intermediate :advanced}
+   :skills {:tracking/smooth-wrist 0.40 :stability/tremor 0.30 :precision/micro-adjust 0.30}
+   :amplitude :small :target-kinematics :constant-vel :muscle {:wrist 0.8 :fingers 0.2}}
+
+  {:id :vt/snake-track    :match "(?i)snake"          :category :tracking  :subcategory :precise
+   :tiers #{:intermediate :advanced}
+   :skills {:tracking/smooth-wrist 0.45 :stability/tremor 0.30 :precision/micro-adjust 0.25}
+   :amplitude :micro :target-kinematics :constant-vel :muscle {:wrist 0.6 :fingers 0.4}}
+
+  {:id :vt/aether         :match "(?i)aether"         :category :tracking  :subcategory :reactive
+   :tiers #{:novice :intermediate :advanced}
+   :skills {:tracking/reactive 0.45 :reaction/choice 0.25 :tracking/smooth-wrist 0.30}
+   :amplitude :medium :target-kinematics :erratic :muscle {:wrist 0.6 :arm 0.4}}
+
+  {:id :vt/ground         :match "(?i)ground(?!.?plaza)" :category :tracking :subcategory :reactive
+   :tiers #{:novice :intermediate :advanced}
+   :skills {:tracking/reactive 0.50 :reaction/choice 0.25 :consistency/endurance 0.25}
+   :amplitude :medium :target-kinematics :erratic :muscle {:wrist 0.5 :arm 0.5}}
+
+  {:id :vt/raw-control    :match "(?i)raw\\s*control"  :category :tracking  :subcategory :control
+   :tiers #{:intermediate :advanced}
+   :skills {:tracking/smooth-arm 0.40 :tracking/reactive 0.30 :orientation/spatial 0.30}
+   :amplitude :large :target-kinematics :erratic :muscle {:arm 0.8 :wrist 0.2}}
+
+  {:id :vt/controlsphere  :match "(?i)controlsphere"  :category :tracking  :subcategory :control
+   :tiers #{:intermediate :advanced}
+   :skills {:tracking/smooth-arm 0.45 :orientation/spatial 0.30 :consistency/endurance 0.25}
+   :amplitude :large :target-kinematics :erratic :muscle {:arm 0.8 :wrist 0.2}}
+
+  ;; ---------------- SWITCHING ----------------
+  {:id :vt/dot-ts         :match "(?i)dot\\s*ts"       :category :switching :subcategory :speed
+   :tiers #{:novice :intermediate :advanced}
+   :skills {:acquisition/ballistic 0.35 :click/timing 0.30 :reaction/simple 0.20 :precision/micro-adjust 0.15}
+   :amplitude :medium :target-kinematics :static :muscle {:wrist 0.7 :arm 0.3}}
+
+  {:id :vt/eddie-ts       :match "(?i)eddie"          :category :switching :subcategory :speed
+   :tiers #{:intermediate :advanced}
+   :skills {:acquisition/ballistic 0.35 :click/timing 0.35 :orientation/spatial 0.30}
+   :amplitude :large :target-kinematics :static :muscle {:arm 0.6 :wrist 0.4}}
+
+  {:id :vt/drift-ts       :match "(?i)drift"          :category :switching :subcategory :evasive
+   :tiers #{:intermediate :advanced}
+   :skills {:tracking/reactive 0.30 :acquisition/ballistic 0.30 :reaction/choice 0.25 :click/timing 0.15}
+   :amplitude :medium :target-kinematics :erratic :muscle {:wrist 0.6 :arm 0.4}}
+
+  {:id :vt/fly-ts         :match "(?i)fly\\s*ts"       :category :switching :subcategory :evasive
+   :tiers #{:novice :intermediate :advanced}
+   :skills {:tracking/reactive 0.30 :reaction/choice 0.30 :acquisition/ballistic 0.25 :click/timing 0.15}
+   :amplitude :medium :target-kinematics :erratic :muscle {:wrist 0.5 :arm 0.5}}
+
+  {:id :vt/control-ts     :match "(?i)control\\s*ts"   :category :switching :subcategory :stability
+   :tiers #{:intermediate :advanced}
+   :skills {:tracking/smooth-arm 0.30 :precision/micro-adjust 0.25 :click/timing 0.25 :orientation/spatial 0.20}
+   :amplitude :large :target-kinematics :bouncing-predictable :muscle {:arm 0.7 :wrist 0.3}}
+
+  {:id :vt/pentabounce    :match "(?i)pentabounce"    :category :switching :subcategory :stability
+   :tiers #{:intermediate :advanced}
+   :skills {:tracking/smooth-arm 0.35 :click/timing 0.25 :orientation/spatial 0.25 :precision/micro-adjust 0.15}
+   :amplitude :large :target-kinematics :bouncing-predictable :muscle {:arm 0.7 :wrist 0.3}}]}

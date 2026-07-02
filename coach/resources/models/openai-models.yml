@@ -1,0 +1,70 @@
+# ============================================
+# openai-models.yml  (OVERRIDE do default do starter-openai)
+# ============================================
+# Vive em resources/ -> no fat-jar fica em BOOT-INF/classes/models/
+# openai-models.yml, que o classpath resolve ANTES do YAML default do
+# embabel-agent-openai-autoconfigure. Logo ESTES slugs (OpenRouter) sao os
+# registrados; 'name' == o id que withLlm/default-llm referenciam (byName).
+#
+# REGRA DESTE ARQUIVO: SO modelos GRATUITOS (sufixo ':free') E que suportam
+# TOOL-CALLING (function calling). Fonte da capacidade: GET
+# https://openrouter.ai/api/v1/models filtrando supported_parameters contains
+# "tools" E id like "*:free". ATENCAO: tier free tem rate-limit agressivo; se o
+# default der 429/404, troque por outro deste arquivo (TODOS tem tools).
+models:
+  # --- DEFAULT: tools verificado + emite EDN limpo ---
+  - name: "openai/gpt-oss-120b:free"
+    model_id: "openai/gpt-oss-120b:free"
+    display_name: "GPT-OSS 120B (OpenRouter free, tools)"
+    max_tokens: 16384
+    temperature: 0.7
+    pricing_model:
+      usd_per1m_input_tokens: 0.0
+      usd_per1m_output_tokens: 0.0
+
+  - name: "openai/gpt-oss-20b:free"
+    model_id: "openai/gpt-oss-20b:free"
+    display_name: "GPT-OSS 20B (OpenRouter free, tools)"
+    max_tokens: 16384
+    temperature: 0.7
+    pricing_model:
+      usd_per1m_input_tokens: 0.0
+      usd_per1m_output_tokens: 0.0
+
+  # --- 1M de contexto, tools verificado ---
+  - name: "nvidia/nemotron-3-super-120b-a12b:free"
+    model_id: "nvidia/nemotron-3-super-120b-a12b:free"
+    display_name: "Nemotron 3 Super 120B (OpenRouter free, tools, 1M ctx)"
+    max_tokens: 16384
+    temperature: 0.7
+    pricing_model:
+      usd_per1m_input_tokens: 0.0
+      usd_per1m_output_tokens: 0.0
+
+  - name: "google/gemma-4-31b-it:free"
+    model_id: "google/gemma-4-31b-it:free"
+    display_name: "Gemma 4 31B IT (OpenRouter free, tools)"
+    max_tokens: 16384
+    temperature: 0.7
+    pricing_model:
+      usd_per1m_input_tokens: 0.0
+      usd_per1m_output_tokens: 0.0
+
+  # --- tools-capable pela API; deram 429 na sondagem (reserva) ---
+  - name: "qwen/qwen3-next-80b-a3b-instruct:free"
+    model_id: "qwen/qwen3-next-80b-a3b-instruct:free"
+    display_name: "Qwen3 Next 80B Instruct (OpenRouter free, tools)"
+    max_tokens: 16384
+    temperature: 0.7
+    pricing_model:
+      usd_per1m_input_tokens: 0.0
+      usd_per1m_output_tokens: 0.0
+
+  - name: "meta-llama/llama-3.3-70b-instruct:free"
+    model_id: "meta-llama/llama-3.3-70b-instruct:free"
+    display_name: "Llama 3.3 70B Instruct (OpenRouter free, tools)"
+    max_tokens: 16384
+    temperature: 0.7
+    pricing_model:
+      usd_per1m_input_tokens: 0.0
+      usd_per1m_output_tokens: 0.0
