@@ -117,7 +117,7 @@
                                   {:skill k :label (labels/skill-nome k)
                                    :z z :dir (name dir)})))
                      :percentiles (latest-percentiles ds)
-                     :placement (placement/status scores)
+                     :placement (placement/status scores thresholds)
                      :n-scores (count scores) :n-sessions (count kins))]
     (db/append! ds :skill-snapshot nil {:estimates est})
     ;; alvos possíveis pro perfil: a UI mostra o rótulo, salva o id — o

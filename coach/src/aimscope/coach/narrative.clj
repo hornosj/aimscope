@@ -75,15 +75,22 @@
     "progrediu"       "O plano anterior está funcionando — mantenha. Se dois treinos seguidos não moverem o número do seu ponto fraco, atualize o coach."
     "Se depois de ~6 sessões o seu ponto fraco não subir, o plano não está transferindo — atualize o coach pra re-rotear."))
 
-(defn- secao-placement [{:keys [completo? faltam itens]}]
+(defn- secao-placement [{:keys [completo? faltam itens estagio]}]
   (when (and (some? completo?) (not completo?))
-    (str "\n\n## Teste inicial (" faltam " de " (count itens) " faltando)\n"
-         "Antes de confiar no diagnóstico completo, jogue 1x cada um destes — "
-         "cada mapa mede um par de habilidades diferente:\n"
+    (str "\n\n## Teste inicial (" faltam " de " (count itens) " faltando"
+         (when (and estagio (> estagio 1)) " — você subiu de estágio") ")\n"
+         "Antes de confiar no diagnóstico completo, jogue os mapas abaixo — "
+         "cada um mede um par de habilidades diferente. Quem bate no teto da "
+         "régua sobe pro mapa mais difícil (2 runs):\n"
          (str/join "\n"
-                   (for [{:keys [scenario jogado? mede-labels]} itens]
+                   (for [{:keys [scenario jogado? mede-labels runs runs-alvo
+                                 captura-de-tela?]} itens]
                      (str "- " (if jogado? "✅" "⬜") " **" scenario "** — mede "
-                          (str/join " + " mede-labels)))))))
+                          (str/join " + " mede-labels)
+                          (when (and (not jogado?) runs-alvo (> runs-alvo 1))
+                            (str " (" (or runs 0) "/" runs-alvo " runs)"))
+                          (when (and (not jogado?) captura-de-tela?)
+                            " — ligue a captura de tela")))))))
 
 (defn narrativa-deterministica
   "Markdown completo SEM LLM: rótulos pt-BR, zero chave interna."

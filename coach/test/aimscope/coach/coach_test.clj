@@ -169,22 +169,68 @@
 (deftest placement-cobre-o-espaco-de-skills-com-reguas
   (let [th (cat/load-thresholds)
         catalog (cat/load-catalog)]
-    (doseq [{:keys [scenario]} placement/sequencia]
+    ;; TODOS os degraus da escada (Novice/Intermediate/Advanced) precisam de
+    ;; régua semeada e match no catálogo — é o que torna a escalada honesta
+    (doseq [{:keys [degraus]} placement/sequencia
+            scenario degraus]
       (is (some? (cat/threshold-for th scenario))
-          (str "cenário do placement sem régua semeada: " scenario))
+          (str "degrau do placement sem régua semeada: " scenario))
       (is (some? (cat/match-scenario catalog scenario))
-          (str "cenário do placement não casa no catálogo: " scenario)))
-    ;; as 11 skills aparecem em pelo menos um item? (cobertura declarada)
+          (str "degrau do placement não casa no catálogo: " scenario)))
+    ;; as skills aparecem em pelo menos um item? (cobertura declarada)
     (let [medidas (set (mapcat :mede placement/sequencia))]
       (is (>= (count medidas) 10)
-          (str "placement mede só " (count medidas) " skills")))))
+          (str "placement mede só " (count medidas) " skills")))
+    ;; cenários reativos exigem captura de tela (canal da leitura)
+    (is (some :captura-de-tela? placement/sequencia))))
+
+(def ^:private th-placement (cat/load-thresholds))
 
 (deftest placement-status-marca-jogados
-  (let [st (placement/status [{:scenario "vt pasu rasp novice"}])]
+  (let [st (placement/status [{:scenario "vt pasu rasp novice" :score 700}]
+                             th-placement)]
     (is (false? (:completo? st)))
+    (is (= 1 (:estagio st)))
     (is (= (dec (count placement/sequencia)) (:faltam st)))
     (is (true? (:jogado? (first (filter #(= "VT Pasu Rasp Novice" (:scenario %))
                                         (:itens st))))))))
+
+(deftest placement-escala-quando-bate-no-teto
+  (testing "score no teto Novice (850 = nível 400) escala pro Intermediate ×2 runs"
+    (let [st (placement/status [{:scenario "VT Pasu Rasp Novice" :score 850}]
+                               th-placement)
+          item (first (filter #(clojure.string/starts-with? (:scenario %) "VT Pasu")
+                              (:itens st)))]
+      (is (= "VT Pasu Rasp Intermediate" (:scenario item)))
+      (is (= 2 (:estagio item)))
+      (is (= 2 (:runs-alvo item)))
+      (is (false? (:jogado? item)))
+      (is (= 2 (:estagio st)))))
+  (testing "capando o Intermediate, sobe pro Advanced"
+    (let [st (placement/status [{:scenario "VT Pasu Rasp Novice" :score 850}
+                                {:scenario "VT Pasu Rasp Intermediate" :score 1050}]
+                               th-placement)
+          item (first (filter #(clojure.string/starts-with? (:scenario %) "VT Pasu")
+                              (:itens st)))]
+      (is (= "VT Pasu Rasp Advanced" (:scenario item)))
+      (is (= 3 (:estagio item)))))
+  (testing "capando o Advanced, a escada esgotou: satisfeito com teto marcado"
+    (let [st (placement/status [{:scenario "VT Pasu Rasp Novice" :score 850}
+                                {:scenario "VT Pasu Rasp Intermediate" :score 1050}
+                                {:scenario "VT Pasu Rasp Advanced" :score 1270}]
+                               th-placement)
+          item (first (filter #(clojure.string/starts-with? (:scenario %) "VT Pasu")
+                              (:itens st)))]
+      (is (true? (:jogado? item)))
+      (is (true? (:teto? item)))))
+  (testing "abaixo do teto: 1 run basta no estágio 1 (nível absoluto, ADR 0004)"
+    (let [st (placement/status [{:scenario "VT Pasu Rasp Novice" :score 700}]
+                               th-placement)
+          item (first (filter #(clojure.string/starts-with? (:scenario %) "VT Pasu")
+                              (:itens st)))]
+      (is (= 1 (:estagio item)))
+      (is (true? (:jogado? item)))
+      (is (false? (:teto? item))))))
 
 (def ^:private dados-narrativa
   {:diagnosis {:gargalo-global {:skill "reactive-tracking/reading" :value 33.4}

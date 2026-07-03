@@ -1306,10 +1306,13 @@ impl App {
                 let completo = pl.get("completo?").and_then(|x| x.as_bool()).unwrap_or(true);
                 if !completo {
                     let faltam = pl.get("faltam").and_then(|x| x.as_i64()).unwrap_or(0);
+                    let estagio = pl.get("estagio").and_then(|x| x.as_i64()).unwrap_or(1);
                     theme::card().show(ui, |ui| {
-                        theme::section_title(ui, &format!("Teste inicial — {faltam} mapa(s) faltando"));
+                        theme::section_title(ui, &format!(
+                            "Teste inicial — {faltam} mapa(s) faltando{}",
+                            if estagio > 1 { " · estágio 2 (você bateu no teto)" } else { "" }));
                         ui.label(egui::RichText::new(
-                            "Jogue 1x cada mapa com a gravação ligada; cada um mede um par de habilidades.")
+                            "Jogue cada mapa com a gravação ligada; quem bate no teto da régua sobe pro mapa mais difícil (2 runs).")
                             .color(theme::MUTED).small());
                         if let Some(itens) = pl.get("itens").and_then(|x| x.as_array()) {
                             for it in itens {
@@ -1319,10 +1322,21 @@ impl App {
                                     .map(|a| a.iter().filter_map(|x| x.as_str())
                                         .collect::<Vec<_>>().join(" + "))
                                     .unwrap_or_default();
+                                let runs = it.get("runs").and_then(|x| x.as_i64()).unwrap_or(0);
+                                let alvo = it.get("runs-alvo").and_then(|x| x.as_i64()).unwrap_or(1);
+                                let captura = it.get("captura-de-tela?")
+                                    .and_then(|x| x.as_bool()).unwrap_or(false);
                                 ui.horizontal(|ui| {
                                     ui.label(if feito { "✅" } else { "⬜" });
                                     ui.label(egui::RichText::new(scen).color(theme::INK_2));
-                                    ui.label(egui::RichText::new(format!("— {mede}"))
+                                    let mut extra = format!("— {mede}");
+                                    if !feito && alvo > 1 {
+                                        extra.push_str(&format!(" · {runs}/{alvo} runs"));
+                                    }
+                                    if !feito && captura {
+                                        extra.push_str(" · 📷 captura de tela");
+                                    }
+                                    ui.label(egui::RichText::new(extra)
                                         .color(theme::MUTED).small());
                                 });
                             }
