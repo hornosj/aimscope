@@ -266,8 +266,39 @@
 (deftest narrativa-sem-dados-nao-quebra
   (let [md (nar/narrativa-deterministica {})]
     (is (string? md))
+    (is (clojure.string/includes? md "## Briefing"))
     (is (clojure.string/includes? md "## Diagnóstico"))
     (is (not (re-find nar/padrao-jargao md)))))
+
+(deftest briefing-abre-pessoal-com-dados-reais
+  (let [md (nar/narrativa-deterministica
+            (assoc dados-narrativa
+                   :profile {:player/name "João"}
+                   :objective {:resumo-humano "Dominar a sua sens atual · foco: Técnica de flick"}
+                   :benchmarks [{:nome "Voltaic S5 — Intermediate"
+                                 :overall-rank 3 :overall-rank-name "Gold"
+                                 :categories [{:scenarios [{:score 800.0 :tier 3}]}]}]))]
+    (is (clojure.string/includes? md "## Briefing"))
+    (is (clojure.string/includes? md "Olá, João!"))
+    (is (clojure.string/includes? md "Gold") "nível = tier OFICIAL do benchmark")
+    (is (clojure.string/includes? md "Dominar a sua sens atual"))
+    (is (nar/narrativa-valida? md)))
+  (testing "sem conta/nome: saudação genérica, nível não inventado"
+    (let [md (nar/narrativa-deterministica dados-narrativa)]
+      (is (clojure.string/includes? md "Olá!"))
+      (is (clojure.string/includes? md "não vi seu rank oficial")))))
+
+(deftest nivel-oficial-escolhe-bench-mais-jogado
+  (is (nil? (nar/nivel-oficial nil)))
+  (is (nil? (nar/nivel-oficial [{:nome "X" :overall-rank 0 :overall-rank-name "No Rank"
+                                 :categories []}]))
+      "rank 0 = sem rank: nunca vira nível")
+  (let [n (nar/nivel-oficial
+           [{:nome "Viscose S2 — Medium" :overall-rank 2 :overall-rank-name "Rayon"
+             :categories [{:scenarios [{:score 1.0 :tier 2}]}]}
+            {:nome "Voltaic S5 — Intermediate" :overall-rank 3 :overall-rank-name "Gold"
+             :categories [{:scenarios [{:score 1.0 :tier 3} {:score 2.0 :tier 3}]}]}])]
+    (is (= "Gold" (:rank n)) "o benchmark com mais cenários jogados dá o nível")))
 
 ;; ---------------------------------------------------------------------------
 ;; objetivo em linguagem natural (CONTEXT.md: Objetivo)

@@ -1,9 +1,10 @@
 (ns aimscope.coach.narrative
-  "Conteúdo da narrativa do coach — PURO (sem embabel/LLM), logo testável no
-  ambiente deps.edn. O texto determinístico daqui é a fonte da verdade; o
-  agente (insight_agent, fat-jar) usa o LLM só pra polir a prosa e valida a
-  saída com narrativa-valida? antes de aceitar (QA 2026-07-02: linguagem
-  natural, zero jargão interno, anti-alucinação por construção)."
+  "Conteúdo do BRIEFING do coach (CONTEXT.md: Briefing — a narrativa única do
+  produto) — PURO (sem embabel/LLM), logo testável no ambiente deps.edn.
+  O texto determinístico daqui é a fonte da verdade; o agente (insight_agent,
+  fat-jar) usa o LLM só pra polir a prosa (Leitura do coach) e valida a saída
+  com narrativa-valida? antes de aceitar (QA 2026-07-02: linguagem natural,
+  zero jargão interno, anti-alucinação por construção)."
   (:require [aimscope.coach.labels :as labels]
             [clojure.string :as str]))
 
@@ -92,11 +93,54 @@
                           (when (and (not jogado?) captura-de-tela?)
                             " — ligue a captura de tela")))))))
 
+(defn nivel-oficial
+  "Tier GERAL oficial do jogador: o overall-rank do benchmark onde ele tem
+  mais cenários jogados (benchmarks.json). nil sem conta/sem rank — o
+  briefing nunca inventa nível."
+  [benchmarks]
+  (->> benchmarks
+       (keep (fn [b]
+               (let [played (->> (:categories b) (mapcat :scenarios)
+                                 (filter :score) count)]
+                 (when (and (:overall-rank-name b)
+                            (pos? played)
+                            (pos? (or (:overall-rank b) 0)))
+                   {:bench (:nome b) :rank (:overall-rank-name b)
+                    :played played}))))
+       (sort-by :played >)
+       first))
+
+(defn- secao-abertura
+  "A abertura pessoal do briefing: saudação (nome do perfil), nível (tier
+  oficial), objetivo interpretado e os mapas de agora. Só dados reais —
+  campo ausente é omitido, nunca inventado."
+  [{:keys [profile objective benchmarks plan diagnosis]}]
+  (let [nome    (some-> (:player/name profile) str str/trim not-empty)
+        nivel   (nivel-oficial benchmarks)
+        objetivo (some-> (:resumo-humano objective) str str/trim not-empty)
+        gargalo (get-in diagnosis [:gargalo-global :skill])
+        mapas   (->> (:steps plan)
+                     (keep #(or (:scenario-label %)
+                                (some-> (:scenario %) labels/scenario-nome)))
+                     distinct (take 3) seq)]
+    (str (if nome (str "Olá, " nome "!") "Olá!") " "
+         (if nivel
+           (str "Você é um jogador **" (:rank nivel) "** no " (:bench nivel) ". ")
+           "Ainda não vi seu rank oficial — vincule sua conta Steam na aba Benchmarks. ")
+         (when objetivo (str "Seu objetivo: " objetivo ". "))
+         (if gargalo
+           (str "O que mais segura sua mira hoje é " (fmt-skill gargalo)
+                (when mapas
+                  (str " — e o remédio de agora é: " (str/join ", " (map #(str "**" % "**") mapas)))))
+           "Jogue o teste inicial pra eu te conhecer")
+         ".")))
+
 (defn narrativa-deterministica
-  "Markdown completo SEM LLM: rótulos pt-BR, zero chave interna."
-  [{:keys [diagnosis plan outcome]}]
+  "Markdown completo do briefing SEM LLM: rótulos pt-BR, zero chave interna."
+  [{:keys [diagnosis plan outcome] :as dados}]
   (let [gargalo (get-in diagnosis [:gargalo-global :skill])]
-    (str "## Diagnóstico\n" (secao-diagnostico diagnosis) "\n"
+    (str "## Briefing\n" (secao-abertura dados) "\n"
+         "\n## Diagnóstico\n" (secao-diagnostico diagnosis) "\n"
          "\n## O plano e o porquê\n" (secao-plano plan gargalo) "\n"
          "\n## Como executar\n" (secao-execucao (:steps plan)) "\n"
          "\n## Sinal de alerta\n" (secao-alerta outcome) "\n"
@@ -108,10 +152,11 @@
   #"[a-zA-Z]{2,}/[a-zA-Z][a-zA-Z0-9-]*")
 
 (defn narrativa-valida?
-  "Gate do LLM: mantém as 4 seções, não vaza jargão interno, tamanho são."
+  "Gate do LLM: mantém as 5 seções, não vaza jargão interno, tamanho são."
   [texto]
   (and (string? texto)
-       (< 200 (count texto) 4000)
+       (< 200 (count texto) 4500)
        (every? #(str/includes? texto %)
-               ["## Diagnóstico" "## O plano" "## Como executar" "## Sinal de alerta"])
+               ["## Briefing" "## Diagnóstico" "## O plano" "## Como executar"
+                "## Sinal de alerta"])
        (not (re-find padrao-jargao texto))))

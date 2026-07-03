@@ -19,6 +19,7 @@
   %LOCALAPPDATA%/aimscope/coach/. Saída: narrative.md no mesmo diretório."
   (:require [aimscope.coach.embabel :as a]
             [aimscope.coach.narrative :as nar]
+            [aimscope.coach.profile :as profile]
             [cheshire.core :as json]
             [clojure.java.io :as io]
             [clojure.string :as str])
@@ -70,16 +71,29 @@
   (let [f (io/file (coach-dir) name*)]
     (when (.exists f) (json/parse-string (slurp f) true))))
 
+(defn- read-json-raiz
+  "JSON no diretório PAI do coach (%LOCALAPPDATA%/aimscope) — objective.json
+  mora lá, junto do profile.json."
+  [name*]
+  (let [f (io/file (.getParentFile (coach-dir)) name*)]
+    (when (.exists f) (json/parse-string (slurp f) true))))
+
 (defn- resumo-dados []
   (let [d (read-json "diagnosis.json")
         p (read-json "plan.json")
-        o (read-json "outcome.json")]
+        o (read-json "outcome.json")
+        b (read-json "benchmarks.json")]
     {:diagnosis (when d (select-keys d [:skills/ranked :skills/sem-evidencia
                                         :gargalo-global :cenarios-subperformando
                                         :placement :n-scores :n-sessions]))
      :plan      (when p (select-keys p [:status :target :target-label :goal
                                         :steps :cost-min]))
-     :outcome   (when o (select-keys o [:veredito-geral :por-skill :recomendacao]))}))
+     :outcome   (when o (select-keys o [:veredito-geral :por-skill :recomendacao]))
+     ;; abertura pessoal do briefing (CONTEXT.md: Briefing)
+     :profile   (select-keys (profile/load-profile) [:player/name])
+     :objective (some-> (read-json-raiz "objective.json")
+                        (select-keys [:resumo-humano]))
+     :benchmarks (:benchmarks b)}))
 
 ;; Conteúdo determinístico + validação vivem em aimscope.coach.narrative
 ;; (ns puro, testável no deps.edn — este ns só faz a fiação GOAP/embabel).

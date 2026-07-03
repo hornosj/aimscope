@@ -157,6 +157,7 @@ fn narrative_md(ui: &mut egui::Ui, md: &str) {
 /// ADR 0005: eixos ortogonais (política de sens × alvo de jogo × foco).
 #[derive(Clone)]
 struct ProfileUi {
+    name: String,        // saudação do briefing
     sens_policy: String, // fixed | range | search
     game_target: String, // kovaaks | transfer
     sens_min: String,    // cm/360 (só política range)
@@ -169,6 +170,7 @@ struct ProfileUi {
 impl Default for ProfileUi {
     fn default() -> Self {
         ProfileUi {
+            name: String::new(),
             sens_policy: "fixed".into(),
             game_target: "kovaaks".into(),
             sens_min: String::new(),
@@ -199,6 +201,9 @@ fn load_profile_ui() -> ProfileUi {
     let mut p = ProfileUi::default();
     if let Ok(s) = std::fs::read_to_string(profile_path()) {
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) {
+            if let Some(n) = v.get("player/name").and_then(|x| x.as_str()) {
+                p.name = n.into();
+            }
             if let Some(g) = v.get("player/sens-policy").and_then(|x| x.as_str()) {
                 p.sens_policy = g.into();
             } else if let Some(g) = v.get("player/goal").and_then(|x| x.as_str()) {
@@ -249,6 +254,7 @@ fn save_profile_ui(p: &ProfileUi, cfg: &Config) -> anyhow::Result<()> {
         .and_then(|s| serde_json::from_str(&s).ok())
         .unwrap_or_else(|| serde_json::json!({}));
     let o = v.as_object_mut().expect("profile.json raiz é objeto");
+    o.insert("player/name".into(), serde_json::json!(p.name.trim()));
     o.insert("player/sens-policy".into(), serde_json::json!(p.sens_policy));
     o.insert("player/game-target".into(), serde_json::json!(p.game_target));
     o.remove("player/goal"); // campo único pré-eixos (ADR 0005)
@@ -899,6 +905,12 @@ impl App {
         let mut interpret_objective = false;
         theme::card().show(ui, |ui| {
             theme::section_title(ui, "Seu objetivo");
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new("Nome").small());
+                ui.add(egui::TextEdit::singleline(&mut self.prof.name)
+                    .hint_text("como o coach te chama")
+                    .desired_width(ui.available_width() - 8.0));
+            });
             // linguagem natural primeiro: o jogador DESCREVE; a IA estrutura
             ui.add(
                 egui::TextEdit::multiline(&mut self.prof.objective)
@@ -1073,8 +1085,8 @@ impl App {
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new("Coach").color(theme::INK).size(18.0).strong());
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button("💬 Explicar em texto").clicked() {
-                    coach_cmd = Some(("__narrate__", "Gerando explicação do diagnóstico..."));
+                if ui.button("📋 Atualizar briefing").clicked() {
+                    coach_cmd = Some(("__narrate__", "Gerando seu briefing..."));
                 }
                 if ui.button("🔄 Atualizar diagnóstico").on_hover_text(
                     "lê as sessões novas, rediagnostica, replaneja e confere a previsão anterior",
@@ -1159,6 +1171,11 @@ impl App {
                 })
                 .unwrap_or_default();
 
+            // habilidades à esquerda; briefing (a narrativa única, CONTEXT.md)
+            // ocupa a área à direita — antes vazia
+            ui.horizontal_top(|ui| {
+            ui.vertical(|ui| {
+            ui.set_max_width(430.0);
             theme::card().show(ui, |ui| {
                 theme::section_title(ui, "Suas habilidades");
                 if let Some(ranked) = d.get("skills/ranked").and_then(|r| r.as_array()) {
@@ -1258,6 +1275,31 @@ impl App {
                     }
                 }
             });
+            }); // coluna esquerda (habilidades)
+            ui.vertical(|ui| {
+                // ---- briefing: a narrativa única do coach ---------------------
+                theme::card().show(ui, |ui| {
+                    theme::section_title(ui, "Briefing");
+                    match self.coach.narrative.clone() {
+                        Some(md) => {
+                            egui::ScrollArea::vertical()
+                                .id_salt("briefing")
+                                .max_height(460.0)
+                                .show(ui, |ui| narrative_md(ui, &md));
+                        }
+                        None => {
+                            ui.label(egui::RichText::new(
+                                "Seu briefing pessoal aparece aqui: quem você é, seu nível, \
+                                 seu objetivo, pontos fortes e fracos e o que jogar agora.")
+                                .color(theme::MUTED));
+                            if ui.button("📋 Gerar briefing").clicked() {
+                                coach_cmd = Some(("__narrate__", "Gerando seu briefing..."));
+                            }
+                        }
+                    }
+                });
+            });
+            }); // fim habilidades + briefing
             ui.add_space(8.0);
 
             // evolução: só séries com 2+ pontos, só as top-6, rótulos amigáveis
@@ -1396,18 +1438,7 @@ impl App {
                 ui.add_space(8.0);
             }
 
-            // ---- explicação em texto (narrativa) ------------------------------
-            if let Some(md) = self.coach.narrative.clone() {
-                theme::card().show(ui, |ui| {
-                    egui::CollapsingHeader::new(
-                        egui::RichText::new("Explicação do coach").color(theme::INK).strong())
-                        .default_open(false)
-                        .show(ui, |ui| {
-                            egui::ScrollArea::vertical().max_height(280.0)
-                                .show(ui, |ui| narrative_md(ui, &md));
-                        });
-                });
-            }
+            // (a antiga "Explicação do coach" foi absorvida pelo card Briefing)
         });
 
         if let Some((cmd, label)) = coach_cmd {
