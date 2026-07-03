@@ -114,6 +114,19 @@
 
 (defn- m [metrics & path] (get-in metrics path))
 
+(defn choice-valido?
+  "Gate de VALIDADE do canal choice-reaction (QA 2026-07-02, dado real do JP):
+  erro angular mediano ~90° = a direção de alvo detectada na tela está
+  descorrelacionada do movimento real -> o wrong-direction-rate é cara-ou-
+  coroa, não sinal. Canal inválido NÃO é evidência (nunca inventamos número).
+  Sensor antigo sem :median_angle_err_deg passa (não dá pra julgar)."
+  [metrics]
+  (let [rc (m metrics :reaction_choice)]
+    (boolean
+     (and (:wrong_direction_rate rc)
+          (let [err (:median_angle_err_deg rc)]
+            (or (nil? err) (< err 45.0)))))))
+
 (defn- band-summary
   "bouts_by_amplitude do sensor: {\"small\" {\"sparc\" {\"median\" ...}}}."
   [metrics band key*]
@@ -174,7 +187,7 @@
                                               (m metrics :reaction :rt_median_ms)))
               :confidence (min 1.0 (/ (or (m metrics :reaction :n_matched) 0) 30.0))})
 
-      (m metrics :reaction_choice :wrong_direction_rate)
+      (choice-valido? metrics)
       (assoc :reactive-tracking/reading
              {:value      (double (lerp-scale (anchors :wrong-dir)
                                               (m metrics :reaction_choice :wrong_direction_rate)))

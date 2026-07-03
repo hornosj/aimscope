@@ -433,10 +433,25 @@
     (is (> (get-in ev [:reactive-tracking/control :value]) 80.0))
     (let [ruim (skills/kinematic-evidence
                 {:n_bouts 80 :bouts_summary {}
-                 :reaction_choice {:wrong_direction_rate 0.45 :n 30}
+                 :reaction_choice {:wrong_direction_rate 0.45 :n 30
+                                   :median_angle_err_deg 20.0}
                  :pursuit {:realign_median_ms 480.0 :n_matched 30}})]
       (is (< (get-in ruim [:reactive-tracking/reading :value]) 25.0))
       (is (< (get-in ruim [:reactive-tracking/control :value]) 25.0)))))
+
+(deftest choice-descorrelacionado-nao-e-evidencia
+  ;; caso real (QA 2026-07-02): erro angular mediano ~90° = detector no chute;
+  ;; wrong-dir vira cara-ou-coroa e NÃO pode puxar a leitura pra 23
+  (let [ev (skills/kinematic-evidence
+            {:n_bouts 80 :bouts_summary {}
+             :reaction_choice {:wrong_direction_rate 0.44 :n 87
+                               :median_angle_err_deg 90.6}})]
+    (is (nil? (get-in ev [:reactive-tracking/reading :value]))
+        "canal inválido não é evidência — a leitura cai pro canal de score"))
+  (is (false? (skills/choice-valido? {:reaction_choice nil})))
+  (is (true? (skills/choice-valido?
+              {:reaction_choice {:wrong_direction_rate 0.1 :n 30}}))
+      "sensor antigo sem o campo de erro angular passa"))
 
 ;; ---------------------------------------------------------------------------
 ;; experimento de sens (ADR 0005)
