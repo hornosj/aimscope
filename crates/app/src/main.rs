@@ -134,23 +134,98 @@ fn parse_hex_color(s: &str) -> egui::Color32 {
 }
 
 /// Markdown minimalista da narrativa -> egui (títulos, bullets, texto).
-fn narrative_md(ui: &mut egui::Ui, md: &str) {
+/// Segmentos em **negrito** que casam com `scenario_targets` viram LINKS —
+/// clicar num mapa citado no briefing abre o painel de cenário (issue #7).
+/// Devolve o cenário clicado, se algum.
+fn narrative_md(
+    ui: &mut egui::Ui,
+    md: &str,
+    scenario_targets: &std::collections::HashSet<String>,
+) -> Option<String> {
+    let mut clicked: Option<String> = None;
+    let mut inline = |ui: &mut egui::Ui, text: &str| {
+        ui.spacing_mut().item_spacing.x = 0.0;
+        for (i, seg) in text.split("**").enumerate() {
+            if seg.is_empty() {
+                continue;
+            }
+            if i % 2 == 1 {
+                // negrito; mapa conhecido vira link clicável
+                if scenario_targets.contains(seg) {
+                    if ui.link(egui::RichText::new(seg).strong().color(theme::ACCENT))
+                        .on_hover_text("abrir painel do cenário")
+                        .clicked()
+                    {
+                        clicked = Some(seg.to_string());
+                    }
+                } else {
+                    ui.label(egui::RichText::new(seg).strong().color(theme::INK));
+                }
+            } else {
+                ui.label(seg.to_string());
+            }
+        }
+    };
     for line in md.lines() {
-        let clean = line.replace("**", "");
-        if let Some(h) = clean.strip_prefix("## ") {
+        if let Some(h) = line.strip_prefix("## ") {
             ui.add_space(6.0);
-            ui.label(egui::RichText::new(h).color(theme::INK).strong().size(14.0));
-        } else if let Some(b) = clean.strip_prefix("- ") {
+            ui.label(egui::RichText::new(h.replace("**", ""))
+                .color(theme::INK).strong().size(14.0));
+        } else if let Some(b) = line.strip_prefix("- ") {
             ui.horizontal_wrapped(|ui| {
-                ui.label("•");
-                ui.label(b.to_string());
+                ui.label("• ");
+                inline(ui, b);
             });
-        } else if !clean.trim().is_empty() {
+        } else if !line.trim().is_empty() {
             ui.horizontal_wrapped(|ui| {
-                ui.label(clean.trim().to_string());
+                inline(ui, line.trim());
             });
         }
     }
+    clicked
+}
+
+// ---- lançar cenário no KovaaK's (protocolo Steam) ---------------------------
+
+/// Formato oficial do botão "copy scenario's Steam URI" do KovaaK's.
+fn scenario_steam_uri(scenario: &str) -> String {
+    format!("steam://run/824270/?action=jump-to-scenario;name={scenario}")
+}
+
+fn launch_scenario(scenario: &str) -> anyhow::Result<()> {
+    std::process::Command::new("cmd")
+        .args(["/C", "start", ""])
+        .arg(scenario_steam_uri(scenario))
+        .spawn()?;
+    Ok(())
+}
+
+/// Procura a linha do cenário nos benchmarks oficiais (nome exato,
+/// case-insensitive): (linha, rank-names, rank-colors, nome do bench).
+fn find_bench_row(
+    benchmarks: Option<&serde_json::Value>,
+    scen: &str,
+) -> Option<(serde_json::Value, Vec<String>, Vec<String>, String)> {
+    let arr = benchmarks?.get("benchmarks")?.as_array()?;
+    for b in arr {
+        let nome = b.get("nome").and_then(|x| x.as_str()).unwrap_or("").to_string();
+        let rn: Vec<String> = b.get("rank-names").and_then(|x| x.as_array())
+            .map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect())
+            .unwrap_or_default();
+        let rc: Vec<String> = b.get("rank-colors").and_then(|x| x.as_array())
+            .map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect())
+            .unwrap_or_default();
+        for cat in b.get("categories").and_then(|x| x.as_array()).into_iter().flatten() {
+            for r in cat.get("scenarios").and_then(|x| x.as_array()).into_iter().flatten() {
+                if r.get("scenario").and_then(|x| x.as_str())
+                    .is_some_and(|s| s.eq_ignore_ascii_case(scen))
+                {
+                    return Some((r.clone(), rn, rc, nome));
+                }
+            }
+        }
+    }
+    None
 }
 
 /// Perfil de objetivo — MESMO arquivo que o coach lê (profile.json).
@@ -373,6 +448,8 @@ struct App {
     chat_rx: Option<Receiver<Result<String>>>,
     // ---- experimento de sens (ADR 0005) ----
     exp_target: String, // cm/360 alvo digitado no formulário
+    // ---- painel de cenário (issue #7): clique num mapa citado ----
+    scenario_panel: Option<String>,
 }
 
 impl App {
@@ -397,6 +474,7 @@ impl App {
             chat_topic: None,
             chat_rx: None,
             exp_target: String::new(),
+            scenario_panel: None,
         };
         app.refresh_sessions();
         app
@@ -546,6 +624,7 @@ impl App {
     fn draw_benchmarks(&mut self, ui: &mut egui::Ui) {
         let mut refresh = false;
         let mut talk_about: Option<String> = None;
+        let mut open_panel: Option<String> = None;
 
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new("Benchmarks").color(theme::INK).size(18.0).strong());
@@ -688,7 +767,11 @@ impl App {
                                                 );
                                                 if let Some(sk) = skill {
                                                     let extra = if weak { " · ponto fraco" } else { "" };
-                                                    resp = resp.on_hover_text(format!("{sk}{extra}"));
+                                                    resp = resp.on_hover_text(
+                                                        format!("{sk}{extra} — clique para abrir o painel"));
+                                                }
+                                                if resp.clicked() {
+                                                    open_panel = Some(scen.to_string());
                                                 }
                                                 resp.context_menu(|ui| {
                                                     if ui.button("💬 conversar sobre isso").clicked() {
@@ -782,6 +865,9 @@ impl App {
 
         if refresh {
             self.refresh_benchmarks();
+        }
+        if let Some(s) = open_panel {
+            self.scenario_panel = Some(s);
         }
         if let Some(topic) = talk_about {
             self.chat_topic = Some(topic.clone());
@@ -1139,8 +1225,42 @@ impl App {
     }
 
     // ----------------------------------------------------------------- coach
+    /// Mapas citados em qualquer superfície do coach — briefing só linka
+    /// cenário CONHECIDO (plano, teste inicial ou benchmarks).
+    fn scenario_targets(&self, d: &serde_json::Value) -> std::collections::HashSet<String> {
+        let mut t = std::collections::HashSet::new();
+        if let Some(p) = &self.coach.plan {
+            for st in p.get("steps").and_then(|s| s.as_array()).into_iter().flatten() {
+                if let Some(s) = st.get("scenario-label").and_then(|x| x.as_str()) {
+                    t.insert(s.to_string());
+                }
+            }
+        }
+        for it in d.pointer("/placement/itens").and_then(|x| x.as_array()).into_iter().flatten() {
+            if let Some(s) = it.get("scenario").and_then(|x| x.as_str()) {
+                t.insert(s.to_string());
+            }
+        }
+        if let Some(bs) = self.coach.benchmarks.as_ref()
+            .and_then(|b| b.get("benchmarks")).and_then(|x| x.as_array())
+        {
+            for b in bs {
+                for cat in b.get("categories").and_then(|x| x.as_array()).into_iter().flatten() {
+                    for r in cat.get("scenarios").and_then(|x| x.as_array()).into_iter().flatten() {
+                        if let Some(s) = r.get("scenario").and_then(|x| x.as_str()) {
+                            t.insert(s.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        t
+    }
+
+    // ----------------------------------------------------------------- coach
     fn draw_coach(&mut self, ui: &mut egui::Ui) {
         let mut coach_cmd: Option<(&'static str, &'static str)> = None;
+        let mut open_scenario: Option<String> = None;
 
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new("Coach").color(theme::INK).size(18.0).strong());
@@ -1342,10 +1462,15 @@ impl App {
                     theme::section_title(ui, "Briefing");
                     match self.coach.narrative.clone() {
                         Some(md) => {
-                            egui::ScrollArea::vertical()
+                            let targets = self.scenario_targets(&d);
+                            if let Some(s) = egui::ScrollArea::vertical()
                                 .id_salt("briefing")
                                 .max_height(460.0)
-                                .show(ui, |ui| narrative_md(ui, &md));
+                                .show(ui, |ui| narrative_md(ui, &md, &targets))
+                                .inner
+                            {
+                                open_scenario = Some(s);
+                            }
                         }
                         None => {
                             ui.label(egui::RichText::new(
@@ -1557,7 +1682,12 @@ impl App {
                                     ui.horizontal(|ui| {
                                         ui.label(egui::RichText::new(format!("{min:.0} min"))
                                             .color(theme::INK).strong());
-                                        ui.label(egui::RichText::new(scen).color(theme::INK_2));
+                                        if ui.link(egui::RichText::new(scen).color(theme::ACCENT))
+                                            .on_hover_text("abrir painel do cenário")
+                                            .clicked()
+                                        {
+                                            open_scenario = Some(scen.to_string());
+                                        }
                                         ui.label(egui::RichText::new(format!("→ {skill} {delta}"))
                                             .color(theme::MUTED).small());
                                     });
@@ -1589,8 +1719,113 @@ impl App {
             // (a antiga "Explicação do coach" foi absorvida pelo card Briefing)
         });
 
+        if let Some(s) = open_scenario {
+            self.scenario_panel = Some(s);
+        }
         if let Some((cmd, label)) = coach_cmd {
             self.run_coach_job(cmd, label);
+        }
+    }
+
+    /// Painel de cenário (issue #7): skills que treina, tier e thresholds do
+    /// jogador, ▶ Jogar (lança o KovaaK's no cenário E arma a gravação).
+    fn draw_scenario_panel(&mut self, ctx: &egui::Context) {
+        let Some(scen) = self.scenario_panel.clone() else { return };
+        let mut open = true;
+        let mut play = false;
+        let mut talk: Option<String> = None;
+        egui::Window::new(egui::RichText::new(&scen).color(theme::INK).strong())
+            .id(egui::Id::new("scenario_panel"))
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(false)
+            .default_width(340.0)
+            .show(ctx, |ui| {
+                let row = find_bench_row(self.coach.benchmarks.as_ref(), &scen);
+                if let Some((r, rank_names, rank_colors, bench)) = &row {
+                    if let Some(sk) = r.get("skill-label").and_then(|x| x.as_str()) {
+                        ui.label(egui::RichText::new(format!("Treina: {sk}"))
+                            .color(theme::INK_2));
+                        if let Some(h) = r.get("skill-hint").and_then(|x| x.as_str()) {
+                            ui.label(egui::RichText::new(h).color(theme::MUTED).small());
+                        }
+                    }
+                    ui.add_space(4.0);
+                    let tier = r.get("tier").and_then(|x| x.as_i64()).unwrap_or(0);
+                    let score = r.get("score").and_then(|x| x.as_f64());
+                    match score {
+                        Some(s) => {
+                            let rank = if tier > 0 {
+                                rank_names.get((tier as usize) - 1).cloned()
+                            } else { None };
+                            let cor = if tier > 0 {
+                                rank_colors.get((tier as usize) - 1)
+                                    .map(|c| parse_hex_color(c))
+                                    .unwrap_or(theme::INK)
+                            } else { theme::INK };
+                            ui.horizontal(|ui| {
+                                ui.label(egui::RichText::new(format!("Seu score: {s:.0}"))
+                                    .color(theme::INK).strong());
+                                if let Some(rk) = rank {
+                                    ui.label(egui::RichText::new(rk).color(cor).strong());
+                                }
+                            });
+                            if let Some(nt) = r.get("next-threshold").and_then(|x| x.as_f64()) {
+                                if nt > 0.0 {
+                                    ui.label(egui::RichText::new(format!(
+                                        "próximo tier em {nt:.0} ({:.0}%)", 100.0 * s / nt))
+                                        .color(theme::MUTED).small());
+                                }
+                            }
+                        }
+                        None => {
+                            ui.label(egui::RichText::new("Você ainda não jogou este cenário.")
+                                .color(theme::MUTED).small());
+                        }
+                    }
+                    ui.label(egui::RichText::new(bench).color(theme::MUTED).small());
+                } else {
+                    ui.label(egui::RichText::new(
+                        "Cenário prescrito pelo coach — jogue e o score entra na próxima análise.")
+                        .color(theme::MUTED).small());
+                }
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    let idle = matches!(self.state, State::Idle);
+                    if ui.add_enabled(idle, egui::Button::new("▶ Jogar no KovaaK's"))
+                        .on_hover_text("abre o KovaaK's neste cenário e arma a gravação de sessão")
+                        .clicked()
+                    {
+                        play = true;
+                    }
+                    if ui.button("💬 conversar").clicked() {
+                        talk = Some(format!("Cenário: {scen}."));
+                    }
+                });
+            });
+        if play {
+            match launch_scenario(&scen) {
+                Ok(_) => {
+                    // toda run prescrita vira dado medido: a gravação arma junto
+                    self.start_recording();
+                    self.status = format!(
+                        "KovaaK's lançado em “{scen}” — gravação armada; pare ao terminar a run.");
+                    self.scenario_panel = None;
+                }
+                Err(e) => self.error = Some(format!("lançando o KovaaK's: {e:#}")),
+            }
+        }
+        if let Some(topic) = talk {
+            self.chat_topic = Some(topic.clone());
+            self.chat_open = true;
+            self.chat_msgs.push(chat::ChatMsg {
+                role: "assistant".into(),
+                content: format!("Vamos falar de: {topic}\nO que você quer saber?"),
+            });
+            self.scenario_panel = None;
+        }
+        if !open {
+            self.scenario_panel = None;
         }
     }
 }
@@ -1685,6 +1920,9 @@ impl eframe::App for App {
                     self.draw_chat(ui);
                 });
         }
+
+        // painel flutuante de cenário (issue #7) — funciona em qualquer aba
+        self.draw_scenario_panel(ctx);
 
         egui::CentralPanel::default()
             .frame(egui::Frame::new().fill(theme::PAGE).inner_margin(egui::Margin::same(14)))
