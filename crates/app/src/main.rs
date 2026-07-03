@@ -154,18 +154,25 @@ fn narrative_md(ui: &mut egui::Ui, md: &str) {
 }
 
 /// Perfil de objetivo — MESMO arquivo que o coach lê (profile.json).
+/// ADR 0005: eixos ortogonais (política de sens × alvo de jogo × foco).
 #[derive(Clone)]
 struct ProfileUi {
-    goal: String,      // fixed-sens | sens-range | game-transfer
-    budget: String,    // min/dia
-    objective: String, // texto livre; o agente interpreta -> objective.json
-    steam: String,     // conta Steam (link/ID64/vanity) — porta de entrada dos benchmarks
+    sens_policy: String, // fixed | range | search
+    game_target: String, // kovaaks | transfer
+    sens_min: String,    // cm/360 (só política range)
+    sens_max: String,    // cm/360 (só política range)
+    budget: String,      // min/dia
+    objective: String,   // texto livre; o agente interpreta -> objective.json
+    steam: String,       // conta Steam (link/ID64/vanity) — porta de entrada dos benchmarks
 }
 
 impl Default for ProfileUi {
     fn default() -> Self {
         ProfileUi {
-            goal: "fixed-sens".into(),
+            sens_policy: "fixed".into(),
+            game_target: "kovaaks".into(),
+            sens_min: String::new(),
+            sens_max: String::new(),
             budget: "45".into(),
             objective: String::new(),
             steam: String::new(),
@@ -192,8 +199,27 @@ fn load_profile_ui() -> ProfileUi {
     let mut p = ProfileUi::default();
     if let Ok(s) = std::fs::read_to_string(profile_path()) {
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) {
-            if let Some(g) = v.get("player/goal").and_then(|x| x.as_str()) {
-                p.goal = g.into();
+            if let Some(g) = v.get("player/sens-policy").and_then(|x| x.as_str()) {
+                p.sens_policy = g.into();
+            } else if let Some(g) = v.get("player/goal").and_then(|x| x.as_str()) {
+                // legado pré-eixos (ADR 0005)
+                p.sens_policy = match g {
+                    "sens-range" => "range".into(),
+                    _ => "fixed".into(),
+                };
+                if g == "game-transfer" {
+                    p.game_target = "transfer".into();
+                }
+            }
+            if let Some(t) = v.get("player/game-target").and_then(|x| x.as_str()) {
+                p.game_target = t.into();
+            }
+            if let Some(r) = v.get("player/sens-range").and_then(|x| x.as_array()) {
+                if let (Some(a), Some(b)) = (r.first().and_then(|x| x.as_f64()),
+                                             r.get(1).and_then(|x| x.as_f64())) {
+                    p.sens_min = format!("{a:.0}");
+                    p.sens_max = format!("{b:.0}");
+                }
             }
             if let Some(u) = v.get("player/steam")
                 .or_else(|| v.get("player/kovaaks-username"))
@@ -223,7 +249,14 @@ fn save_profile_ui(p: &ProfileUi, cfg: &Config) -> anyhow::Result<()> {
         .and_then(|s| serde_json::from_str(&s).ok())
         .unwrap_or_else(|| serde_json::json!({}));
     let o = v.as_object_mut().expect("profile.json raiz é objeto");
-    o.insert("player/goal".into(), serde_json::json!(p.goal));
+    o.insert("player/sens-policy".into(), serde_json::json!(p.sens_policy));
+    o.insert("player/game-target".into(), serde_json::json!(p.game_target));
+    o.remove("player/goal"); // campo único pré-eixos (ADR 0005)
+    let range = (p.sens_min.trim().parse::<f64>().ok())
+        .zip(p.sens_max.trim().parse::<f64>().ok())
+        .filter(|(a, b)| p.sens_policy == "range" && *a > 0.0 && *b >= *a);
+    o.insert("player/sens-range".into(),
+        match range { Some((a, b)) => serde_json::json!([a, b]), None => serde_json::json!(null) });
     o.insert("player/sens".into(),
         serde_json::json!({"value": sens, "scale": cfg.scale, "dpi": dpi}));
     // player/target saiu da UI (QA 2026-07-02): o plano mira a skill mais
@@ -887,20 +920,44 @@ impl App {
                     .color(theme::INK_2).small().italics());
             }
             ui.add_space(4.0);
-            egui::ComboBox::from_id_salt("goal")
+            // eixo 1: política de sens (ADR 0005)
+            egui::ComboBox::from_id_salt("sens_policy")
                 .width(ui.available_width() - 8.0)
-                .selected_text(match self.prof.goal.as_str() {
-                    "sens-range" => "Melhorar overall (sens livre)",
-                    "game-transfer" => "Transferir pro Valorant",
-                    _ => "Dominar MINHA sens (fixa)",
+                .selected_text(match self.prof.sens_policy.as_str() {
+                    "range" => "Tenho um range de sens",
+                    "search" => "Procuro a melhor sens pra mim",
+                    _ => "Já tenho uma sens (fixa)",
                 })
                 .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut self.prof.goal, "fixed-sens".into(),
-                        "Dominar MINHA sens (fixa) — o coach nunca sugere trocar");
-                    ui.selectable_value(&mut self.prof.goal, "sens-range".into(),
-                        "Melhorar overall — trocar sens é permitido (com custo)");
-                    ui.selectable_value(&mut self.prof.goal, "game-transfer".into(),
-                        "Transferir pro Valorant — prioriza o que transfere");
+                    ui.selectable_value(&mut self.prof.sens_policy, "fixed".into(),
+                        "Já tenho uma sens (fixa) — o coach nunca sugere trocar");
+                    ui.selectable_value(&mut self.prof.sens_policy, "range".into(),
+                        "Tenho um range — trocar dentro dele é permitido (com custo)");
+                    ui.selectable_value(&mut self.prof.sens_policy, "search".into(),
+                        "Procuro a melhor sens — experimentos guiados pelo coach");
+                });
+            if self.prof.sens_policy == "range" {
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("Range (cm/360)").small());
+                    ui.add(egui::TextEdit::singleline(&mut self.prof.sens_min)
+                        .hint_text("min").desired_width(40.0));
+                    ui.label(egui::RichText::new("–").small());
+                    ui.add(egui::TextEdit::singleline(&mut self.prof.sens_max)
+                        .hint_text("max").desired_width(40.0));
+                });
+            }
+            // eixo 2: alvo de jogo
+            egui::ComboBox::from_id_salt("game_target")
+                .width(ui.available_width() - 8.0)
+                .selected_text(match self.prof.game_target.as_str() {
+                    "transfer" => "Transferir pro jogo (Valorant...)",
+                    _ => "KovaaK's por si só",
+                })
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut self.prof.game_target, "kovaaks".into(),
+                        "KovaaK's por si só — subir rank no benchmark");
+                    ui.selectable_value(&mut self.prof.game_target, "transfer".into(),
+                        "Transferir pro jogo — prioriza o que transfere");
                 });
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new("Minutos/dia").small());

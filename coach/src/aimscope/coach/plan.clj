@@ -5,12 +5,14 @@
   mais barato até o goal. Aqui as ações são GERADAS DO CATÁLOGO (dados),
   não vars — mesmo contrato, origem diferente.
 
-  Perfil de objetivo (CONTEXT.md) filtra as ações:
-  - :fixed-sens  → ações de mudança de sens NÃO EXISTEM no espaço de busca
-  - :sens-range  → mudar sens é ação com custo alto (re-adaptação)
-  - :game-transfer → custos reponderados pelo prior de transferência (baixa
-    confiança, documentado)"
-  (:require [aimscope.coach.goap :as goap]))
+  Perfil de objetivo (CONTEXT.md, ADR 0005 — eixos ortogonais) filtra as ações:
+  - política de sens :fixed  → ações de mudança de sens NÃO EXISTEM no espaço
+  - política :range | :search → mudar sens é ação com custo alto (re-adaptação)
+  - alvo :transfer → custos reponderados pelo prior de transferência (baixa
+    confiança, documentado)
+  Perfis legados (:player/goal) são normalizados na entrada."
+  (:require [aimscope.coach.goap :as goap]
+            [aimscope.coach.profile :as profile]))
 
 (def ^:private skill-gate 60.0)   ; skill "ok" p/ fins de goal/pre
 (def ^:private session-min 15)    ; bloco padrão de grind por cenário
@@ -18,7 +20,7 @@
 (defn- ok-cond [skill] (str "skill/" (namespace skill) "-" (name skill) "/ok?"))
 
 (def ^:private transfer-prior
-  ;; :game-transfer (Valorant) — PRIOR DE BAIXA CONFIANÇA (grill #9): multiplica
+  ;; alvo :transfer (Valorant) — PRIOR DE BAIXA CONFIANÇA (grill #9): multiplica
   ;; o custo (menor = mais prioritário). Micro-flicks/clique >> tracking puro
   ;; (TTK baixo do Valorant premia o primeiro tiro, não o acompanhamento).
   {:flick-tech/micro 0.7 :flick-tech/post-flick 0.75 :flick-tech/stability 0.8
@@ -40,7 +42,7 @@
         :let [w (get (:skills entry) skill 0.3)
               resist ({:control-tracking/arm 1.4 :control-tracking/blending 1.5
                        :control-tracking/fingertip 1.3} skill 1.0)
-              transfer (if (= :game-transfer (:player/goal profile))
+              transfer (if (= :transfer (:player/game-target profile))
                          (transfer-prior skill 1.0) 1.0)
               ;; objetivo em linguagem natural (CONTEXT.md): categorias de foco
               ;; ficam mais baratas — o A* prefere drills alinhados ao objetivo
@@ -58,10 +60,11 @@
             :expected-delta (format "%.0f->%.0f (proj. 2 semanas)" cur (min 100.0 (+ cur 8)))}}))
 
 (defn- sens-actions
-  "Só no modo :sens-range: mudar sens é ação cara (dias de re-adaptação) que
-  destrava skills de precisão OU de amplitude, conforme a direção."
+  "Só nas políticas :range e :search: mudar sens é ação cara (dias de
+  re-adaptação) que destrava skills de precisão OU de amplitude, conforme a
+  direção. Política :fixed = a ação nem existe (ADR 0005)."
   [profile]
-  (when (= :sens-range (:player/goal profile))
+  (when (#{:range :search} (:player/sens-policy profile))
     [{:name "sens:diminuir-10pct" :pre #{}
       :post #{(ok-cond :flick-tech/micro) (ok-cond :control-tracking/fingertip)}
       :cost 120.0
@@ -87,7 +90,8 @@
   Devolve {:status :ok :steps [{:scenario :skill :minutes :expected-delta}] ...}
   ou {:status :ja-destravado} / {:status :no-plan}."
   [catalog profile skills target-entry]
-  (let [state0  (set (keep (fn [[skill {v :value}]]
+  (let [profile (profile/normalize profile)
+        state0  (set (keep (fn [[skill {v :value}]]
                              (when (and v (>= v skill-gate)) (ok-cond skill)))
                            skills))
         goal    (goal-for-scenario target-entry skills)

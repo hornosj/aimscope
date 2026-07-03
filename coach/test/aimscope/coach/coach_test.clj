@@ -9,6 +9,7 @@
             [aimscope.coach.objective :as obj]
             [aimscope.coach.placement :as placement]
             [aimscope.coach.plan :as plan]
+            [aimscope.coach.profile :as profile]
             [aimscope.coach.residual :as residual]
             [aimscope.coach.skills :as skills])
   (:import [java.io File]))
@@ -75,16 +76,44 @@
         (is (not-any? #(= :sens-change (:tipo %)) (:steps p)))))))
 
 (deftest sens-range-permite-acao-de-sens
-  (testing "no modo sens-range a mudança de sens EXISTE no espaço de busca"
+  (testing "políticas :range/:search têm mudança de sens no espaço de busca"
     (let [skills (assoc-in skills-braço-fraco [:flick-tech/micro :value] 30.0)
           target (first (filter #(= :vt/onewall-ts (:id %)) catalog))
-          p-fixed (plan/build-plan catalog {:player/goal :fixed-sens} skills target)
-          p-range (plan/build-plan catalog {:player/goal :sens-range} skills target)]
+          p-fixed  (plan/build-plan catalog {:player/sens-policy :fixed} skills target)
+          p-range  (plan/build-plan catalog {:player/sens-policy :range} skills target)
+          p-search (plan/build-plan catalog {:player/sens-policy :search} skills target)
+          ;; legado pré-eixos ainda funciona (normalize na entrada)
+          p-legacy (plan/build-plan catalog {:player/goal :sens-range} skills target)]
       (is (= :ok (:status p-fixed)))
       (is (not-any? #(= :sens-change (:tipo %)) (:steps p-fixed)))
-      ;; range: a ação existe; com custo 120 ela só entra se for o caminho
-      ;; barato — aqui só validamos que o plano continua ok
-      (is (= :ok (:status p-range))))))
+      ;; range/search: a ação existe; com custo 120 ela só entra se for o
+      ;; caminho barato — aqui só validamos que o plano continua ok
+      (is (= :ok (:status p-range)))
+      (is (= :ok (:status p-search)))
+      (is (= :ok (:status p-legacy))))))
+
+(deftest eixos-ortogonais-valorant-com-sens-fixa
+  (testing "o caso que o campo único não representava (ADR 0005)"
+    (let [prof {:player/sens-policy :fixed :player/game-target :transfer
+                :player/game :valorant}
+          target (first (filter #(= :com/bounce-180 (:id %)) catalog))
+          p (plan/build-plan catalog prof skills-braço-fraco target)]
+      (is (= :ok (:status p)))
+      (is (not-any? #(= :sens-change (:tipo %)) (:steps p))
+          "transferência NÃO abre ação de sens — eixos independentes"))))
+
+(deftest perfil-legado-migra-para-eixos
+  (let [p (profile/normalize {:player/goal :game-transfer})]
+    (is (= :fixed (:player/sens-policy p)))
+    (is (= :transfer (:player/game-target p)))
+    (is (nil? (:player/goal p)) "campo único morre na normalização"))
+  (let [p (profile/normalize {:player/goal :sens-range})]
+    (is (= :range (:player/sens-policy p)))
+    (is (= :kovaaks (:player/game-target p))))
+  (testing "eixos explícitos vencem o legado"
+    (let [p (profile/normalize
+             {:player/goal :fixed-sens :player/sens-policy :search})]
+      (is (= :search (:player/sens-policy p))))))
 
 (deftest level-of-interpola-e-clampa
   (let [pts [[100 500] [200 600] [300 700] [400 800]]] ; [energia score]
@@ -201,14 +230,18 @@
 (deftest objetivo-parser-deterministico
   (let [m (obj/parse-deterministico
            "quero melhorar minha mira no Valorant sem trocar de sens, focando em flicks")]
-    (is (= :fixed-sens (:goal-mode m)) "'sem trocar sens' vence o jogo citado")
+    (is (= :fixed (:sens-policy m)) "'sem trocar sens' NÃO conflita com o jogo")
+    (is (= :transfer (:game-target m)) "eixos ortogonais: fixed + transfer coexistem")
     (is (= :valorant (:game m)))
     (is (some #{"flick-tech"} (:focus m))))
   (let [m (obj/parse-deterministico "quero subir no valorant, aceito testar outra sens")]
-    (is (= :sens-range (:goal-mode m)))
+    (is (= :range (:sens-policy m)))
     (is (= :valorant (:game m))))
+  (let [m (obj/parse-deterministico "procuro a melhor sens possivel pra mim")]
+    (is (= :search (:sens-policy m))))
   (let [m (obj/parse-deterministico "melhorar tracking e cliques no cs2")]
-    (is (= :game-transfer (:goal-mode m)))
+    (is (= :fixed (:sens-policy m)) "sem menção a sens: política default")
+    (is (= :transfer (:game-target m)))
     (is (= :cs2 (:game m)))
     (is (= #{"control-tracking" "click-timing"} (set (:focus m)))))
   ;; texto vazio nunca quebra
@@ -216,23 +249,30 @@
 
 (deftest objetivo-valida-gate-do-llm
   (is (nil? (obj/valida nil)))
-  (is (nil? (obj/valida {:goal-mode "modo-inventado"})) "modo fora do vocabulário reprova")
-  (let [v (obj/valida {"goal-mode" "game-transfer" "game" "valorant"
+  (is (nil? (obj/valida {:sens-policy "politica-inventada"}))
+      "política fora do vocabulário reprova")
+  (let [v (obj/valida {"sens-policy" "fixed" "game" "valorant"
                        "focus" ["flick-tech" "categoria-inventada"]
                        "resumo" "foco em flicks pro Valorant"})]
-    (is (= :game-transfer (:goal-mode v)))
+    (is (= :fixed (:sens-policy v)))
+    (is (= :transfer (:game-target v)))
     (is (= ["flick-tech"] (:focus v)) "categoria inventada é filtrada, não aceita")
     (is (= :valorant (:game v))))
+  ;; goal-mode legado (LLM/arquivo antigos) ainda é aceito, mapeado pra eixos
+  (is (= :range (:sens-policy (obj/valida {"goal-mode" "sens-range"}))))
   ;; jogo desconhecido degrada pra :geral em vez de reprovar tudo
-  (is (= :geral (:game (obj/valida {"goal-mode" "fixed-sens" "game" "fortnite"})))))
+  (is (= :geral (:game (obj/valida {"sens-policy" "fixed" "game" "fortnite"})))))
 
 (deftest objetivo-vira-patch-de-perfil
   (let [patch (obj/objective->profile-patch
-               {:goal-mode :game-transfer :game :valorant :focus ["flick-tech"]})]
-    (is (= :game-transfer (:player/goal patch)))
+               {:sens-policy :fixed :game-target :transfer :game :valorant
+                :focus ["flick-tech"]})]
+    (is (= :fixed (:player/sens-policy patch)))
+    (is (= :transfer (:player/game-target patch)))
     (is (= ["flick-tech"] (:player/focus-categories patch))))
   (is (clojure.string/includes?
-       (obj/resumo-humano {:goal-mode :fixed-sens :game :geral :focus ["flick-tech"]})
+       (obj/resumo-humano {:sens-policy :fixed :game :geral :game-target :kovaaks
+                           :focus ["flick-tech"]})
        "Técnica de flick")))
 
 (deftest skills-sem-evidencia-ficam-fora
