@@ -807,11 +807,19 @@ impl App {
                                                     }
                                                 });
                                                 // -- score (+% até o próximo tier) --
+                                                // identidade por rank (issue #8): o score
+                                                // veste a cor oficial do tier atingido
+                                                let score_cor = if tier > 0 {
+                                                    rank_colors.get((tier as usize) - 1)
+                                                        .copied().unwrap_or(theme::INK)
+                                                } else {
+                                                    theme::INK
+                                                };
                                                 match score {
                                                     Some(s) => {
                                                         ui.horizontal(|ui| {
                                                             ui.label(egui::RichText::new(fmt_score(s))
-                                                                .color(theme::INK).small().strong());
+                                                                .color(score_cor).small().strong());
                                                             if let Some(nt) = r.get("next-threshold")
                                                                 .and_then(|x| x.as_f64())
                                                             {
@@ -1225,6 +1233,40 @@ impl App {
     }
 
     // ----------------------------------------------------------------- coach
+    /// Rank GERAL oficial do jogador (identidade visual, issue #8): o
+    /// overall-rank do benchmark com mais cenários jogados, com a cor
+    /// oficial do tier. Espelha narrative/nivel-oficial do coach.
+    fn overall_rank_badge(&self) -> Option<(String, egui::Color32, String)> {
+        let arr = self.coach.benchmarks.as_ref()?.get("benchmarks")?.as_array()?;
+        let mut best: Option<(usize, String, egui::Color32, String)> = None;
+        for b in arr {
+            let overall = b.get("overall-rank").and_then(|x| x.as_i64()).unwrap_or(0);
+            let name = b.get("overall-rank-name").and_then(|x| x.as_str());
+            if overall <= 0 || name.is_none() {
+                continue;
+            }
+            let played = b.get("categories").and_then(|x| x.as_array())
+                .into_iter().flatten()
+                .flat_map(|c| c.get("scenarios").and_then(|x| x.as_array())
+                    .cloned().unwrap_or_default())
+                .filter(|r| r.get("score").and_then(|x| x.as_f64()).is_some())
+                .count();
+            if played == 0 {
+                continue;
+            }
+            let cor = b.get("rank-colors").and_then(|x| x.as_array())
+                .and_then(|a| a.get((overall as usize) - 1))
+                .and_then(|x| x.as_str())
+                .map(parse_hex_color)
+                .unwrap_or(theme::INK);
+            let bench = b.get("nome").and_then(|x| x.as_str()).unwrap_or("").to_string();
+            if best.as_ref().is_none_or(|(p, ..)| played > *p) {
+                best = Some((played, name.unwrap().to_string(), cor, bench));
+            }
+        }
+        best.map(|(_, n, c, b)| (n, c, b))
+    }
+
     /// Mapas citados em qualquer superfície do coach — briefing só linka
     /// cenário CONHECIDO (plano, teste inicial ou benchmarks).
     fn scenario_targets(&self, d: &serde_json::Value) -> std::collections::HashSet<String> {
@@ -1264,6 +1306,19 @@ impl App {
 
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new("Coach").color(theme::INK).size(18.0).strong());
+            // identidade por rank (issue #8): o tier oficial vira o badge do jogador
+            if let Some((rank, cor, bench)) = self.overall_rank_badge() {
+                egui::Frame::new()
+                    .fill(cor.gamma_multiply(0.18))
+                    .stroke(egui::Stroke::new(1.0, cor))
+                    .corner_radius(10.0)
+                    .inner_margin(egui::Margin::symmetric(8, 2))
+                    .show(ui, |ui| {
+                        ui.label(egui::RichText::new(rank).color(cor).strong());
+                    })
+                    .response
+                    .on_hover_text(format!("seu rank geral oficial no {bench}"));
+            }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui.button("📋 Atualizar briefing").clicked() {
                     coach_cmd = Some(("__narrate__", "Gerando seu briefing..."));
@@ -1450,7 +1505,9 @@ impl App {
                             p.get("top-pct").and_then(|x| x.as_f64()),
                         ) {
                             ui.label(egui::RichText::new(format!("🌍 {scen}: top {top:.1}% do mundo"))
-                                .color(theme::INK_2).small());
+                                .color(theme::INK_2).small())
+                                .on_hover_text("percentil real no leaderboard global \
+                                    do kovaaks.com, pelo seu melhor score");
                         }
                     }
                 }
