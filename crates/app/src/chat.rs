@@ -33,10 +33,13 @@ pub struct ChatMsg {
 }
 
 /// System prompt sólido de coach de mira, com os dados do jogador embutidos.
+/// `sens_policy` (fixed|range|search) liga o guardrail de sens (ADR 0005):
+/// política fixa não amordaça — comentário geral sim, prescrição direta não.
 pub fn system_prompt(
     diagnosis: Option<&serde_json::Value>,
     benchmarks: Option<&serde_json::Value>,
     topic: Option<&str>,
+    sens_policy: Option<&str>,
 ) -> String {
     let mut p = String::from(
         "Você é o coach de mira do aimscope, especialista em KovaaK's e na \
@@ -103,6 +106,24 @@ pub fn system_prompt(
                 }
             }
         }
+    }
+    match sens_policy {
+        Some("fixed") => p.push_str(
+            "\n## Política de sens do jogador: FIXA\n\
+             Ele decidiu dominar a sens atual. NUNCA recomende diretamente trocar \
+             de sens nem proponha experimentos de sens. Conhecimento geral é \
+             permitido e bem-vindo (ex.: 'jogadores de sens baixa costumam ter \
+             flick mais consistente e leitura mais difícil'). Faixas canônicas \
+             em cm/360: alta < 40, média 40-60, baixa > 60.\n",
+        ),
+        Some("range") | Some("search") => p.push_str(
+            "\n## Política de sens do jogador: aberta a experimentar\n\
+             Sugestões de sens são permitidas DENTRO do processo de experimento \
+             do coach (mínimo de runs, veredito por habilidade, queda inicial é \
+             adaptação). Faixas canônicas em cm/360: alta < 40, média 40-60, \
+             baixa > 60.\n",
+        ),
+        _ => {}
     }
     if let Some(t) = topic {
         p.push_str("\n## Assunto desta conversa (clicado pelo jogador)\n");

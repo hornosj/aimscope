@@ -135,6 +135,36 @@
            "Jogue o teste inicial pra eu te conhecer")
          ".")))
 
+(defn- secao-experimento
+  "Leitura do experimento de sens (CONTEXT.md): veredito POR skill, nunca
+  aprovada/reprovada global; antes do mínimo de runs, só o andamento (com a
+  queda inicial explicada). nil sem experimento ativo."
+  [{:keys [ativo? sens-alvo-cm360 sens-base-cm360 pronto? cenarios veredito]}]
+  (when ativo?
+    (str "\n\n## Experimento de sens\n"
+         (format "Você está testando **%.0f cm/360**" (double sens-alvo-cm360))
+         (when sens-base-cm360
+           (format " (sua habitual: %.0f cm/360)" (double sens-base-cm360)))
+         ". "
+         (if pronto?
+           (str "Veredito por habilidade — não é aprovação nem reprovação, é o "
+                "que essa sens ensina sobre o seu jogo:\n"
+                (str/join "\n"
+                          (for [{:keys [label delta veredito]} veredito]
+                            (str "- " (case veredito
+                                        :melhorou "↑" :piorou "↓" "→")
+                                 " **" label "** "
+                                 (case veredito
+                                   :melhorou (format "melhorou (%+.0f)" (double delta))
+                                   :piorou   (format "piorou (%+.0f)" (double delta))
+                                   "estável")))))
+           (str "Ainda coletando: a primeira run de cada mapa NÃO conta — piorar "
+                "no começo é adaptação, não veredito.\n"
+                (str/join "\n"
+                          (for [{:keys [scenario runs-validas runs-necessarias]} cenarios]
+                            (str "- **" scenario "** — " runs-validas "/"
+                                 runs-necessarias " runs válidas"))))))))
+
 (defn narrativa-deterministica
   "Markdown completo do briefing SEM LLM: rótulos pt-BR, zero chave interna."
   [{:keys [diagnosis plan outcome] :as dados}]
@@ -144,6 +174,7 @@
          "\n## O plano e o porquê\n" (secao-plano plan gargalo) "\n"
          "\n## Como executar\n" (secao-execucao (:steps plan)) "\n"
          "\n## Sinal de alerta\n" (secao-alerta outcome) "\n"
+         (secao-experimento (:experimento diagnosis))
          (secao-placement (:placement diagnosis)))))
 
 (def padrao-jargao

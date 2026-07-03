@@ -8,6 +8,7 @@
   (:require [aimscope.coach.bench :as bench]
             [aimscope.coach.catalog :as cat]
             [aimscope.coach.db :as db]
+            [aimscope.coach.experiment :as experiment]
             [aimscope.coach.ingest :as ingest]
             [aimscope.coach.kovaaks-api :as api]
             [aimscope.coach.labels :as labels]
@@ -103,10 +104,17 @@
 
 (defn- run-diagnose [opts]
   (let [{:keys [catalog thresholds scores kins ds]} (load-state opts)
+        prof  (profile/load-profile)
         est   (skills/estimate kins scores catalog thresholds)
         dsdb  (db/->datascript scores est)
         res   (residual/analyze scores est catalog thresholds dsdb)
+        ;; experimento de sens (ADR 0005): só sob política :range/:search —
+        ;; :fixed nunca propõe nem acompanha (guardrail)
+        exp   (when (#{:range :search} (:player/sens-policy prof))
+                (experiment/status (experiment/load-declaracao)
+                                   scores catalog thresholds prof))
         diag  (assoc (residual/diagnosis est res)
+                     :experimento exp
                      :residuals res
                      :skills/por-categoria (skills-por-categoria est)
                      ;; Tendência (ADR 0004): direção vs. o próprio histórico,

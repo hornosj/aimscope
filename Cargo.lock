@@ -241,6 +241,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "capture",
+ "chrono",
  "eframe",
  "egui_plot",
  "serde",

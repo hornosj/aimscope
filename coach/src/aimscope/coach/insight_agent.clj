@@ -85,7 +85,8 @@
         b (read-json "benchmarks.json")]
     {:diagnosis (when d (select-keys d [:skills/ranked :skills/sem-evidencia
                                         :gargalo-global :cenarios-subperformando
-                                        :placement :n-scores :n-sessions]))
+                                        :placement :experimento
+                                        :n-scores :n-sessions]))
      :plan      (when p (select-keys p [:status :target :target-label :goal
                                         :steps :cost-min]))
      :outcome   (when o (select-keys o [:veredito-geral :por-skill :recomendacao]))

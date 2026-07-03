@@ -4,6 +4,7 @@
   (:require [clojure.test :refer [deftest is testing]]
             [aimscope.coach.catalog :as cat]
             [aimscope.coach.csvstats :as csv]
+            [aimscope.coach.experiment :as experiment]
             [aimscope.coach.labels :as labels]
             [aimscope.coach.narrative :as nar]
             [aimscope.coach.objective :as obj]
@@ -436,6 +437,79 @@
                  :pursuit {:realign_median_ms 480.0 :n_matched 30}})]
       (is (< (get-in ruim [:reactive-tracking/reading :value]) 25.0))
       (is (< (get-in ruim [:reactive-tracking/control :value]) 25.0)))))
+
+;; ---------------------------------------------------------------------------
+;; experimento de sens (ADR 0005)
+;; ---------------------------------------------------------------------------
+
+(deftest cm360-espelha-o-sensor
+  ;; mesmos coeficientes de crates/session/src/lib.rs
+  (is (< 40.7 (experiment/cm360 "valorant" 0.4 800) 40.9))
+  (is (< 34.7 (experiment/cm360 "Valorant" 0.15 2500) 35.0))
+  (is (nil? (experiment/cm360 "jogo-desconhecido" 1.0 800)) "escala ignota: nunca chuta")
+  (is (nil? (experiment/cm360 "valorant" 0.4 nil))))
+
+(def ^:private decl-teste
+  {:sens-alvo-cm360 60.0 :tolerancia-cm 2.0
+   :scenarios ["VT Pasu Rasp Novice"]
+   :criado-em "2026-07-01T00:00:00" :status "ativo"})
+
+(def ^:private prof-teste
+  {:player/sens {:value 0.4 :scale :valorant :dpi 800}}) ; ~40.8 cm/360
+
+(defn- run-pasu [score sens played-at]
+  {:scenario "VT Pasu Rasp Novice" :catalog-id :vt4/pasu :score score
+   :sens-scale "Valorant" :horiz-sens sens :played-at played-at})
+
+(deftest experimento-atribui-runs-pela-sens-e-da-veredicto-por-skill
+  (let [;; baseline na sens habitual (0.4 ≈ 40.8cm): nível 300 (score 750)
+        ;; experimento a ~60cm (sens 0.272): 4 runs, 1ª descontada (adaptação
+        ;; — nota 500 baixa de propósito); melhor válida 850 = nível 400
+        scores [(run-pasu 750 0.4   "2026-06-20T10:00:00")
+                (run-pasu 740 0.4   "2026-06-21T10:00:00")
+                (run-pasu 500 0.272 "2026-07-02T10:00:00")
+                (run-pasu 820 0.272 "2026-07-02T11:00:00")
+                (run-pasu 830 0.272 "2026-07-02T12:00:00")
+                (run-pasu 850 0.272 "2026-07-02T13:00:00")]
+        st (experiment/status decl-teste scores catalog th-placement prof-teste)]
+    (is (:ativo? st))
+    (is (:pronto? st))
+    (let [c (first (:cenarios st))]
+      (is (= 3 (:runs-validas c)) "4 runs na sens alvo, 1ª descontada")
+      (is (= 1 (:descontadas c)))
+      (is (pos? (:delta c)) "melhor válida (850) vence o baseline (750)"))
+    (testing "veredito é POR skill, nunca global"
+      (is (vector? (:veredito st)))
+      (let [v (first (filter #(= :flick-tech/stability (:skill %)) (:veredito st)))]
+        (is (= :melhorou (:veredito v)))
+        (is (some? (:label v)) "rótulo pt-BR pra UI/briefing")))
+    (testing "a run descontada (500) NÃO contamina o veredito"
+      (is (every? #(= :melhorou (:veredito %)) (:veredito st))))))
+
+(deftest experimento-sem-runs-suficientes-nao-emite-veredicto
+  (let [scores [(run-pasu 750 0.4   "2026-06-20T10:00:00")
+                (run-pasu 500 0.272 "2026-07-02T10:00:00")
+                (run-pasu 820 0.272 "2026-07-02T11:00:00")]
+        st (experiment/status decl-teste scores catalog th-placement prof-teste)]
+    (is (:ativo? st))
+    (is (false? (:pronto? st)) "1 run válida (2 - desconto) < mínimo de 3: aguarda")
+    (is (nil? (:veredito st)) "nunca inventamos veredito precipitado"))
+  (is (nil? (experiment/status nil [] catalog th-placement prof-teste))
+      "sem declaração: sem experimento"))
+
+(deftest briefing-le-o-experimento
+  (let [exp {:ativo? true :sens-alvo-cm360 60.0 :sens-base-cm360 40.8
+             :pronto? true :cenarios []
+             :veredito [{:skill :reactive-tracking/reading :label "Reativo: leitura"
+                         :delta 7.2 :veredito :melhorou}
+                        {:skill :flick-tech/micro :label "Flick: micro"
+                         :delta -5.0 :veredito :piorou}]}
+        md (nar/narrativa-deterministica
+            (assoc-in dados-narrativa [:diagnosis :experimento] exp))]
+    (is (clojure.string/includes? md "## Experimento de sens"))
+    (is (clojure.string/includes? md "Reativo: leitura"))
+    (is (clojure.string/includes? md "piorou"))
+    (is (not (re-find nar/padrao-jargao md)) "cm/360 e labels não são jargão")))
 
 ;; ---------------------------------------------------------------------------
 ;; âncoras calibradas pelo lab (anchors.edn) — fallback e confiança (ADR 0003)

@@ -197,6 +197,62 @@ fn profile_path() -> PathBuf {
         .join("profile.json")
 }
 
+// ---- experimento de sens (ADR 0005): declaração em experiments.json ---------
+
+fn experiments_path() -> PathBuf {
+    profile_path().with_file_name("experiments.json")
+}
+
+/// cm/360 alvo do experimento ativo, se houver declaração no disco.
+fn load_experiment_target() -> Option<f64> {
+    let v: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(experiments_path()).ok()?).ok()?;
+    if v.get("status").and_then(|x| x.as_str()) == Some("ativo") {
+        v.get("sens-alvo-cm360").and_then(|x| x.as_f64())
+    } else {
+        None
+    }
+}
+
+/// Cenários padrão do experimento: os degraus de triagem do placement —
+/// curados justamente por refletirem skills distintas.
+const EXPERIMENT_SCENARIOS: [&str; 7] = [
+    "VT Pasu Rasp Novice",
+    "VT 1w6ts Rasp Novice",
+    "VT Smoothbot Novice",
+    "VT PreciseOrb Novice",
+    "VT Air Novice",
+    "VT skyTS Novice",
+    "VT psalmTS Novice",
+];
+
+fn start_experiment(target_cm360: f64) -> anyhow::Result<()> {
+    let f = experiments_path();
+    if let Some(dir) = f.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let v = serde_json::json!({
+        "sens-alvo-cm360": target_cm360,
+        "tolerancia-cm": 2.0,
+        "scenarios": EXPERIMENT_SCENARIOS,
+        "criado-em": chrono::Local::now().format("%Y-%m-%dT%H:%M:%S").to_string(),
+        "status": "ativo",
+    });
+    std::fs::write(f, serde_json::to_string_pretty(&v)?)?;
+    Ok(())
+}
+
+fn end_experiment() -> anyhow::Result<()> {
+    let f = experiments_path();
+    let mut v: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&f)?)?;
+    if let Some(o) = v.as_object_mut() {
+        o.insert("status".into(), serde_json::json!("concluido"));
+    }
+    std::fs::write(f, serde_json::to_string_pretty(&v)?)?;
+    Ok(())
+}
+
 fn load_profile_ui() -> ProfileUi {
     let mut p = ProfileUi::default();
     if let Ok(s) = std::fs::read_to_string(profile_path()) {
@@ -315,6 +371,8 @@ struct App {
     chat_input: String,
     chat_topic: Option<String>, // contexto do "conversar sobre isso"
     chat_rx: Option<Receiver<Result<String>>>,
+    // ---- experimento de sens (ADR 0005) ----
+    exp_target: String, // cm/360 alvo digitado no formulário
 }
 
 impl App {
@@ -338,6 +396,7 @@ impl App {
             chat_input: String::new(),
             chat_topic: None,
             chat_rx: None,
+            exp_target: String::new(),
         };
         app.refresh_sessions();
         app
@@ -825,6 +884,7 @@ impl App {
             self.coach.diagnosis.as_ref(),
             self.coach.benchmarks.as_ref(),
             self.chat_topic.as_deref(),
+            Some(self.prof.sens_policy.as_str()),
         );
         // só user/assistant vão como histórico (mensagens de erro ⚠ inclusive:
         // são inofensivas e mantêm o fio da conversa)
@@ -1386,6 +1446,94 @@ impl App {
                     });
                     ui.add_space(8.0);
                 }
+            }
+
+            // ---- experimento de sens (ADR 0005) -------------------------------
+            // só sob política :range/:search — :fixed nunca vê proposta
+            if self.prof.sens_policy != "fixed" {
+                theme::card().show(ui, |ui| {
+                    theme::section_title(ui, "Experimento de sens");
+                    let exp = d.get("experimento").filter(|e| !e.is_null()).cloned();
+                    if let Some(exp) = exp {
+                        let alvo = exp.get("sens-alvo-cm360").and_then(|x| x.as_f64()).unwrap_or(0.0);
+                        let base = exp.get("sens-base-cm360").and_then(|x| x.as_f64());
+                        let pronto = exp.get("pronto?").and_then(|x| x.as_bool()).unwrap_or(false);
+                        ui.label(egui::RichText::new(format!(
+                            "Testando {alvo:.0} cm/360{}",
+                            base.map(|b| format!(" (habitual: {b:.0} cm/360)")).unwrap_or_default()
+                        )).color(theme::INK_2));
+                        if pronto {
+                            ui.label(egui::RichText::new(
+                                "Veredito por habilidade — o que essa sens ensina, não aprovação/reprovação:")
+                                .color(theme::MUTED).small());
+                            if let Some(vs) = exp.get("veredito").and_then(|x| x.as_array()) {
+                                for v in vs {
+                                    let label = v.get("label").and_then(|x| x.as_str()).unwrap_or("?");
+                                    let delta = v.get("delta").and_then(|x| x.as_f64()).unwrap_or(0.0);
+                                    let verd = v.get("veredito").and_then(|x| x.as_str()).unwrap_or("neutro");
+                                    let (glyph, color) = match verd {
+                                        "melhorou" => ("↑", theme::GOOD),
+                                        "piorou" => ("↓", theme::SERIOUS),
+                                        _ => ("→", theme::MUTED),
+                                    };
+                                    ui.horizontal(|ui| {
+                                        ui.label(egui::RichText::new(glyph).color(color).strong());
+                                        ui.label(egui::RichText::new(label).color(theme::INK_2).small());
+                                        if verd != "neutro" {
+                                            ui.label(egui::RichText::new(format!("{delta:+.0}"))
+                                                .color(color).small());
+                                        }
+                                    });
+                                }
+                            }
+                        } else {
+                            ui.label(egui::RichText::new(
+                                "Coletando runs — a primeira de cada mapa não conta (adaptação).")
+                                .color(theme::MUTED).small());
+                            if let Some(cs) = exp.get("cenarios").and_then(|x| x.as_array()) {
+                                for c in cs {
+                                    let scen = c.get("scenario").and_then(|x| x.as_str()).unwrap_or("?");
+                                    let ok = c.get("runs-validas").and_then(|x| x.as_i64()).unwrap_or(0);
+                                    let need = c.get("runs-necessarias").and_then(|x| x.as_i64()).unwrap_or(3);
+                                    ui.label(egui::RichText::new(format!("{} — {ok}/{need} runs válidas",
+                                        scen)).color(theme::MUTED).small());
+                                }
+                            }
+                        }
+                        if ui.small_button("Encerrar experimento").clicked() {
+                            match end_experiment() {
+                                Ok(_) => self.status = "Experimento encerrado.".into(),
+                                Err(e) => self.error = Some(format!("encerrando experimento: {e:#}")),
+                            }
+                        }
+                    } else if let Some(alvo) = load_experiment_target() {
+                        // declarado mas o coach ainda não rodou com ele
+                        ui.label(egui::RichText::new(format!(
+                            "Experimento de {alvo:.0} cm/360 declarado — clique em “Atualizar diagnóstico” para acompanhar."))
+                            .color(theme::MUTED).small());
+                    } else {
+                        ui.label(egui::RichText::new(
+                            "Teste outra sens com veredito por habilidade: jogue os mapas do teste \
+                             inicial na sens alvo; o coach compara com a sua habitual.")
+                            .color(theme::MUTED).small());
+                        ui.horizontal(|ui| {
+                            ui.label(egui::RichText::new("cm/360 alvo").small());
+                            ui.add(egui::TextEdit::singleline(&mut self.exp_target)
+                                .hint_text("ex.: 35").desired_width(50.0));
+                            if ui.small_button("▶ Iniciar experimento").clicked() {
+                                match self.exp_target.trim().replace(',', ".").parse::<f64>() {
+                                    Ok(t) if t > 5.0 && t < 200.0 => match start_experiment(t) {
+                                        Ok(_) => self.status =
+                                            "Experimento iniciado — jogue os mapas na sens alvo e atualize o diagnóstico.".into(),
+                                        Err(e) => self.error = Some(format!("iniciando experimento: {e:#}")),
+                                    },
+                                    _ => self.error = Some("cm/360 alvo inválido (use algo entre 5 e 200)".into()),
+                                }
+                            }
+                        });
+                    }
+                });
+                ui.add_space(8.0);
             }
 
             // ---- plano -------------------------------------------------------
